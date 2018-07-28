@@ -1,0 +1,6 @@
+authors = ["Chris Elrod <elrodc@gmail.com>"]
+name = "SIMDArrays"
+uuid = "604d08c6-8d09-11e8-1189-87850a518ab4"
+version = "0.1.0"
+
+[deps]
