@@ -1,22 +1,47 @@
 module SIMDArrays
 
-using CpuId
+using CpuId, LinearAlgebra, UnsafeArrays
+# or whatever unsafe views are called
+# needed for operations so we can ignore excess elemenents when necessary.
+
+Base.mightalias(A::UnsafeArray, B::UnsafeArray) = false
+
+# Would sorta make sense for this to depend on SIMD?
+# Or would I rather, at least for now, just wrap functions in BLAS calls?
 
 const REGISTER_SIZE = CpuId.simdbytes()
 
-
 abstract type AbstractSIMDArray{T,N} <: AbstractArray{T,N} end
+
 
 struct SIMDArray{T,N} <: AbstractSIMDArray{T,N}
     data::Array{T,N}
     nrows::Int
-    function SIMDArray{T}(::UndefInitializer, S::NTuple{N}) where N
-        R, L = calculate_L_from_size(S)
-        nrows = S[1]
-        data = Array{T,N}(undef, setfirstindex(S, R))
-        new{T,N}()
+    @generated function SIMDArray{T}(::UndefInitializer, S::NTuple{N}) where N
+        quote
+            R, L = calculate_L_from_size(S) # R means number of rows.
+            nrows = S[1]
+            data = Array{T,N}(undef, setfirstindex(S, R))
+            # We need to zero out the excess, so it doesn't interfere
+            # with operations like summing the columns or matrix mul.
+            Base.Cartesian.@nloops $(N-1) i j -> 1:S[j+1] begin
+                for i_0 = L-R+1:L
+                    data[(Base.Cartesian.@ntuple $N j -> i_{j-1})...] = zero($T)
+                end
+            end
+            new{T,N}(data, nrows)
+        end
     end
 end
+
+"""
+Parameters are
+S, the size tuple
+T, the element type
+N, the number of axis
+R, the actual number of rows, where the excess R > S[1] are zero.
+L, number of elements (including buffer zeros).
+"""
 mutable struct SizedSIMDArray{S,T,N,R,L} <: AbstractSIMDArray{T,N}
     data::NTuple{L,T}
     function SizedSIMDArray{S,T,N,R,L}(::UndefInitializer) where {S,T,N,R,L}
@@ -29,9 +54,7 @@ mutable struct SizedSIMDArray{S,T,N,R,L} <: AbstractSIMDArray{T,N}
 
         R, L = calculate_L_from_size(S)
         # @show S, T, N, L
-        q = :(SizedSIMDArray{$S,$T,$N,$R,$L}(undef))
-
-        q
+        :(SizedSIMDArray{$S,$T,$N,$R,$L}(undef))
     end
 end
 const StaticSIMDVector{N,T,L} = SizedSIMDArray{Tuple{N},T,L}
@@ -55,18 +78,21 @@ function Base.getindex(A::SIMDArray{T,N}, i) where {T,N}
 end
 
 round_x_up_to_nearest_y(x::Integer, y::Integer) = cld(x, y) * y
-function calculate_L_from_size(S::NTuple{N}) where N
+function calculate_L_from_size(S::NTuple{N}, ::Type{T} = Float64) where {N,T}
     num_rows = S[1]
     # Use number of simdbytes, or cacheline_length?
     # cacheline_length = 64 ÷ sizeof(T)
-    if num_rows > REGISTER_SIZE
-        L = R = round_x_up_to_nearest_y(num_rows, REGISTER_SIZE)
-    elseif 2num_rows > REGISTER_SIZE
-        L = R = round_x_up_to_nearest_y(num_rows, REGISTER_SIZE ÷ 2)
-    elseif 4num_rows > REGISTER_SIZE
-        L = R = round_x_up_to_nearest_y(num_rows, REGISTER_SIZE ÷ 4)
+    entries_per_register = REGISTER_SIZE ÷ sizeof(T)
+    if num_rows >= entries_per_register
+        L = R = round_x_up_to_nearest_y(num_rows, entries_per_register)
+    elseif 2num_rows >= entries_per_register
+        L = R = round_x_up_to_nearest_y(num_rows, entries_per_register ÷ 2)
+    elseif 4num_rows >= entries_per_register
+        L = R = round_x_up_to_nearest_y(num_rows, entries_per_register ÷ 4)
+    elseif 8num_rows >= entries_per_register
+        L = R = round_x_up_to_nearest_y(num_rows, entries_per_register ÷ 8))
     else
-        L = R = round_x_up_to_nearest_y(num_rows, REGISTER_SIZE ÷ 8)
+        L = R = round_x_up_to_nearest_y(num_rows, max(entries_per_register ÷ 16,1))
     end
     for n ∈ 2:N
         L *= S[n]
