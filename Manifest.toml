@@ -3,9 +3,9 @@ uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
 [[Compat]]
 deps = ["Base64", "Dates", "DelimitedFiles", "Distributed", "InteractiveUtils", "LibGit2", "Libdl", "LinearAlgebra", "Markdown", "Mmap", "Pkg", "Printf", "REPL", "Random", "Serialization", "SharedArrays", "Sockets", "SparseArrays", "Statistics", "Test", "UUIDs", "Unicode"]
-git-tree-sha1 = "c478aec93ea90bb99c307a92df17a76131bf275f"
+git-tree-sha1 = "277d3807440d9793421354b6680911fc95d91a84"
 uuid = "34da2185-b29b-5c13-b0c7-acf172513d20"
-version = "1.0.0"
+version = "1.0.1"
 
 [[CpuId]]
 deps = ["InteractiveUtils", "Markdown", "Pkg", "Test"]
@@ -68,6 +68,14 @@ uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 [[SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 
+[[SIMD]]
+deps = ["Compat"]
+git-tree-sha1 = "671dfac09830d6dff296b0b6a7268e195a880ec6"
+repo-rev = "master"
+repo-url = "https://github.com/eschnett/SIMD.jl.git"
+uuid = "fdea26ae-647d-5447-a871-4b548cad5224"
+version = "1.0.0+"
+
 [[Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 
@@ -81,6 +89,12 @@ uuid = "6462fe0b-24de-5631-8697-dd941f90decc"
 [[SparseArrays]]
 deps = ["LinearAlgebra", "Random"]
 uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+
+[[StaticArrays]]
+deps = ["InteractiveUtils", "LinearAlgebra", "Random", "Statistics", "Test"]
+git-tree-sha1 = "d432c79bef174a830304f8601427a4357dfdbfb7"
+uuid = "90137ffa-7385-5640-81b9-e52037218182"
+version = "0.8.3"
 
 [[Statistics]]
 deps = ["LinearAlgebra", "SparseArrays"]
@@ -101,4 +115,10 @@ uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
 deps = ["Compat"]
 git-tree-sha1 = "55c291cbf0f69b64870de563a831ab13d29c3217"
 uuid = "c4a57d5a-5b31-53a6-b365-19f8c011fbd6"
+version = "0.1.0"
+
+[[jBLAS]]
+deps = ["CpuId", "LinearAlgebra", "Random", "SIMD", "StaticArrays"]
+path = "/home/chriselrod/.julia/dev/jBLAS"
+uuid = "814864de-88d5-11e8-1c72-cfea32f978d7"
 version = "0.1.0"

@@ -4,6 +4,8 @@ authors = ["Chris Elrod <elrodc@gmail.com>"]
 version = "0.1.0"
 
 [deps]
-CpuId = "adafc99b-e345-5852-983c-f28acb93d879"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SIMD = "fdea26ae-647d-5447-a871-4b548cad5224"
 UnsafeArrays = "c4a57d5a-5b31-53a6-b365-19f8c011fbd6"
+jBLAS = "814864de-88d5-11e8-1c72-cfea32f978d7"
