@@ -2,8 +2,8 @@
 Base.@pure randsimd(S...) = randsimd(Float64, Val{S}())
 Base.@pure randsimd(::Type{T}, S...) where T = randsimd(T, Val{S}())
 randsimd(::Type{T}, ::Val{S}) where {S,T} = rand!(SizedSIMDArray(undef, Val(S), T))
-# function Random.rand!(A::SizedSIMDArray{S,T}) where {S,T}
-#     @inbounds for i ∈ eachindex(A)
+# function Random.rand!(A::SizedSIMDArray{S,T,N,R,L}) where {S,T,N,R,L}
+#     @inbounds for i ∈ 1:L
 #         A[i] = rand(T)
 #     end
 #     A
@@ -25,3 +25,9 @@ randnsimd(::Type{T}, ::Val{S}) where {S,T} = randn!(SizedSIMDArray(undef, Val(S)
         A
     end
 end
+# function Random.randn!(A::SizedSIMDArray{S,T,N,R,L}) where {S,T,N,R,L}
+#     @inbounds for i ∈ 1:L
+#         A[i] = randn(T)
+#     end
+#     A
+# end

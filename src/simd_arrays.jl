@@ -5,21 +5,25 @@ abstract type AbstractSIMDArray{T,N} <: AbstractArray{T,N} end
 struct SIMDArray{T,N} <: AbstractSIMDArray{T,N}
     data::Array{T,N}
     nrows::Int
-    function SIMDArray{T}(::UndefInitializer, S::NTuple{N}) where {T,N}
-        R, L = calculate_L_from_size(S) # R means number of rows.
-        nrows = S[1]
-        data = Array{T,N}(undef, setfirstindex(S, R))
-        # We need to zero out the excess, so it doesn't interfere
-        # with operations like summing the columns or matrix mul.
-        # add @generated and quote the expression if you add this back.
-        # Base.Cartesian.@nloops $(N-1) i j -> 1:S[j+1] begin
-        #     for i_0 = L-R+1:L
-        #         data[(Base.Cartesian.@ntuple $N j -> i_{j-1})...] = zero($T)
-        #     end
-        # end
-        new{T,N}(data, nrows)
+    @generated function SIMDArray{T}(::UndefInitializer, S::NTuple{N}) where {T,N}
+        quote
+            R, L = calculate_L_from_size(S) # R means number of rows.
+            nrows = S[1]
+            data = Array{T,N}(undef, setfirstindex(S, R))
+            # We need to zero out the excess, so it doesn't interfere
+            # with operations like summing the columns or matrix mul.
+            # add @generated and quote the expression if you add this back.
+            Base.Cartesian.@nloops $(N-1) i j -> 1:S[j+1] begin
+                for i_0 = L-R+1:L
+                    ( Base.Cartesian.@nref $N out n -> i_{n-1} ) = $(zero(T))
+                end
+            end
+            new{T,N}(data, nrows)
+        end
     end
 end
+
+
 
 """
 Parameters are
@@ -38,17 +42,18 @@ mutable struct SizedSIMDArray{S<:Tuple,T,N,R,L} <: AbstractSIMDArray{T,N}
     @generated function SizedSIMDArray{S,T}(::UndefInitializer) where {S,T}
         SV = S.parameters
         N = length(SV)
+        Stup = ntuple(n -> sv[n], N)#unstable
         R, L = calculate_L_from_size(SV)
-        # quote
-        #     out = SizedSIMDArray{$S,$T,$N,$R,$L}(undef)
-        #     Base.Cartesian.@nloops $(N-1) i j -> 1:$SV[j+1] begin
-        #         for i_0 = $(SV[1]+1:R)
-        #             out[(Base.Cartesian.@ntuple $N j -> i_{j-1})...] = $(zero(T))
-        #         end
-        #     end
-        #     out
-        # end
-        :(SizedSIMDArray{$S,$T,$N,$R,$L}(undef))
+        quote
+            out = SizedSIMDArray{$S,$T,$N,$R,$L}(undef)
+            Base.Cartesian.@nloops $(N-1) i n -> 1:$Stup[n+1] begin
+                @inbounds for i_0 = $(SV[1]+1:R)
+                    ( Base.Cartesian.@nref $N out n -> i_{n-1} ) = $(zero(T))
+                end
+            end
+            out
+        end
+        # :(SizedSIMDArray{$S,$T,$N,$R,$L}(undef))
     end
 end
 
@@ -56,16 +61,16 @@ end
     N = length(S)
     R, L = calculate_L_from_size(S)
     SD = Expr(:curly, :Tuple, S...)
-    # quote
-    #     out = SizedSIMDArray{$SD,$T,$N,$R,$L}(undef)
-    #     Base.Cartesian.@nloops $(N-1) i j -> 1:$S[j+1] begin
-    #         @inbounds for i_0 = $(S[1]+1:R)
-    #             out[(Base.Cartesian.@ntuple $N j -> i_{j-1})...] = $(zero(T))
-    #         end
-    #     end
-    #     out
-    # end
-    :(SizedSIMDArray{$SD,$T,$N,$R,$L}(undef))
+    quote
+        out = SizedSIMDArray{$SD,$T,$N,$R,$L}(undef)
+        Base.Cartesian.@nloops $(N-1) i n -> 1:$S[n+1] begin
+            @inbounds for i_0 = $(S[1]+1:R)
+                ( Base.Cartesian.@nref $N out n -> i_{n-1} ) = $(zero(T))
+            end
+        end
+        out
+    end
+    # :(SizedSIMDArray{$SD,$T,$N,$R,$L}(undef))
 end
 
 const SizedSIMDVector{N,T,R,L} = SizedSIMDArray{Tuple{N},T,1,R,L}
@@ -207,15 +212,17 @@ setfirstindex(tup::NTuple{N,T}, val::T) where {N,T}  = ntuple(j -> j == 1 ? val 
 #     Expr(:tuple, [n == 1 ? :val : :(tup[$n]) for n ∈ 1:N]...)
 # end
 
-Base.IndexStyle(::Type{<:AbstractSIMDArray}) = IndexLinear()
-Base.IndexStyle(::AbstractSIMDArray, ::AbstractArray) = IndexCartesian()
-Base.IndexStyle(::AbstractArray, ::AbstractSIMDArray) = IndexCartesian()
-Base.IndexStyle(::AbstractSIMDArray, ::AbstractArray, ::AbstractArray) = IndexCartesian()
-Base.IndexStyle(::AbstractArray, ::AbstractArray, ::AbstractSIMDArray) = IndexCartesian()
-Base.IndexStyle(::AbstractArray, ::AbstractSIMDArray, ::AbstractArray) = IndexCartesian()
-Base.IndexStyle(::AbstractSIMDArray, ::AbstractSIMDArray, ::AbstractArray) = IndexCartesian()
-Base.IndexStyle(::AbstractSIMDArray, ::AbstractArray, ::AbstractSIMDArray) = IndexCartesian()
-Base.IndexStyle(::AbstractArray, ::AbstractSIMDArray, ::AbstractSIMDArray) = IndexCartesian()
+# defauling to IndexCartesian() at the moment
+# I want @eachindex when we only have two SIMDArrays to bring us to all elements.
+# Base.IndexStyle(::Type{<:AbstractSIMDArray}) = IndexLinear()
+# Base.IndexStyle(::AbstractSIMDArray, ::AbstractArray) = IndexCartesian()
+# Base.IndexStyle(::AbstractArray, ::AbstractSIMDArray) = IndexCartesian()
+# Base.IndexStyle(::AbstractSIMDArray, ::AbstractArray, ::AbstractArray) = IndexCartesian()
+# Base.IndexStyle(::AbstractArray, ::AbstractArray, ::AbstractSIMDArray) = IndexCartesian()
+# Base.IndexStyle(::AbstractArray, ::AbstractSIMDArray, ::AbstractArray) = IndexCartesian()
+# Base.IndexStyle(::AbstractSIMDArray, ::AbstractSIMDArray, ::AbstractArray) = IndexCartesian()
+# Base.IndexStyle(::AbstractSIMDArray, ::AbstractArray, ::AbstractSIMDArray) = IndexCartesian()
+# Base.IndexStyle(::AbstractArray, ::AbstractSIMDArray, ::AbstractSIMDArray) = IndexCartesian()
 
 # function Base.similar()
 

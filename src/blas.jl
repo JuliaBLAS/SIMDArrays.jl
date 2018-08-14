@@ -66,7 +66,11 @@ end
 function mulquote(M,N,P,ADR,XR,T,init=:initkernel!)
     (L1S, L2S, L3S), num = jBLAS.blocking_structure(M, N, P, T)
     if num == 0
-        return cache_mulquote(M,N,P,ADR,XR,L1S,T,init)
+        if init == :kernel! || M*N*P > 8^3
+            return cache_mulquote(M,N,P,ADR,XR,L1S,T,init)
+        else
+            return unrolled_kernel_quote(M,N,P,ADR,XR,T)
+        end
         # return base_mulquote(M,N,P,ADR,XR,T)
     elseif num == 1
         return cache_mulquote(M,N,P,ADR,XR,L1S,T,init)
@@ -78,6 +82,48 @@ function mulquote(M,N,P,ADR,XR,T,init=:initkernel!)
     end
 end
 
+function initkernel_quote(D::SizedSIMDMatrix{M,Pₖ,T,stride_AD},
+                            A::SizedSIMDMatrix{M,N,T,stride_AD},
+                            X::SizedSIMDMatrix{N,Pₖ,T,stride_X}) where {M,Pₖ,stride_AD,stride_X,N,T}
+    initkernel_quote(M,Pₖ,stride_AD,stride_X,N,T)
+end
+function unrolled_kernel_quote(M,N,Pₖ,stride_AD,stride_X,T)
+    #
+    Mₖ = stride_AD
+    T_size = sizeof(T)
+    AD_stride = stride_AD * T_size
+    X_stride = stride_X * T_size
+    L = REGISTER_SIZE ÷ T_size
+    Q, r = divrem(Mₖ, L) #Assuming Mₖ is a multiple of L
+    if Q > 0
+        r == 0 || throw("Number of rows $Mₖ not a multiple of register size: $REGISTER_SIZE.")
+    else
+        L = r
+        Q = 1
+    end
+    V = Vec{L,T}
+    quote
+        pD, pA, pX = pointer(D), pointer(A), pointer(X)
+        Base.Cartesian.@nexprs $Pₖ p -> begin
+            vX = $V(unsafe_load(pX + (p-1)*$X_stride))
+            Base.Cartesian.@nexprs $Q q -> begin
+                vA_q = vload($V, pA + $REGISTER_SIZE*(q-1))
+                Dx_p_q = vA_q * vX
+            end
+        end
+        Base.Cartesian.@nexprs $(N-1) n -> begin
+            Base.Cartesian.@nexprs $Pₖ p -> begin
+                vX = $V(unsafe_load(pX + n*$T_size + (p-1)*$X_stride))
+                Base.Cartesian.@nexprs $Q q -> begin
+                    vA_q = vload($V, pA + n*$AD_stride + $REGISTER_SIZE*(q-1))
+                    Dx_p_q = fma(vA_q, vX, Dx_p_q)
+                end
+            end
+        end
+        Base.Cartesian.@nexprs $Pₖ p -> Base.Cartesian.@nexprs $Q q -> vstore(Dx_p_q, pD + $REGISTER_SIZE*(q-1) + $AD_stride*(p-1))
+        nothing
+    end
+end
 
 function block_loop_quote_prefetch(L1M,L1N,L1P,stride_AD,stride_X,M_iter,M_remain,P_iter,P_remain,T_size,kernel=:kernel!,pA=:pAₙ,pX=:pXₙ,pD=:pD)
 
@@ -208,9 +254,9 @@ function block_loop_quote(L1M,L1N,L1P,stride_AD,stride_X,M_iter,M_remain,P_iter,
             PM_ratio, PM_remainder = divrem(P_iter, M_iter + 1)
             q = quote
                 for mᵢ ∈ 0:$(M_iter-1)
-                    $(kernel)($pD + $(T_size*L1M)*mᵢ, $A, $X, Kernel{$L1M,$L1P,$stride_AD,$stride_X,$L1N}())
+                    $(kernel)($pD + $(T_size*L1M)*mᵢ, $A, $pX, Kernel{$L1M,$L1P,$stride_AD,$stride_X,$L1N}())
                 end
-                $(kernel)($pD + $(T_size*L1M*M_iter), $A_r, $X, Kernel{$M_remain,$L1P,$stride_AD,$stride_X,$L1N}())
+                $(kernel)($pD + $(T_size*L1M*M_iter), $A_r, $pX, Kernel{$M_remain,$L1P,$stride_AD,$stride_X,$L1N}())
                 for pᵢ ∈ 1:$(M_iter+1)
                     for mᵢ ∈ $(M_iter+1) - pᵢ:$(M_iter-1)
                         $(kernel)($D, $A, $X, Kernel{$L1M,$L1P,$stride_AD,$stride_X,$L1N}())
@@ -247,9 +293,9 @@ function block_loop_quote(L1M,L1N,L1P,stride_AD,stride_X,M_iter,M_remain,P_iter,
         else
             q = quote
                 for mᵢ ∈ 0:$(M_iter-1)
-                    $(kernel)($pD + $(T_size*L1M)*mᵢ, $A, $X, Kernel{$L1M,$L1P,$stride_AD,$stride_X,$L1N}())
+                    $(kernel)($pD + $(T_size*L1M)*mᵢ, $A, $pX, Kernel{$L1M,$L1P,$stride_AD,$stride_X,$L1N}())
                 end
-                $(kernel)($pD + $(T_size*L1M*M_iter), $A_r, $X, Kernel{$M_remain,$L1P,$stride_AD,$stride_X,$L1N}())
+                $(kernel)($pD + $(T_size*L1M*M_iter), $A_r, $pX, Kernel{$M_remain,$L1P,$stride_AD,$stride_X,$L1N}())
                 for pᵢ ∈ 1:$(P_iter-1)
                     for mᵢ ∈ $(M_iter+1)-pᵢ:$(M_iter-1)
                         $(kernel)($D, $A, $X, Kernel{$L1M,$L1P,$stride_AD,$stride_X,$L1N}())
@@ -354,8 +400,8 @@ function cache_mulquote(M,N,P,stride_AD,stride_X,(L1M,L1N,L1P),::Type{T}, init =
     if N_remain > 0 # we need two goes
         push!(q.args,
         quote
-            pAₙ = pA + $(L1N*N_reps * T_size * stride_AD)
-            pXₙ = pX + $(L1N*N_reps * T_size)
+            pAₙ = pA + $(L1N*N_iter * T_size * stride_AD)
+            pXₙ = pX + $(L1N*N_iter * T_size)
             $(block_loop_quote(L1M,N_remain,L1P,stride_AD,stride_X,M_iter,M_remain,P_iter,P_remain,T_size,:kernel!,:pAₙ,:pXₙ,:pD))
         end
         )
