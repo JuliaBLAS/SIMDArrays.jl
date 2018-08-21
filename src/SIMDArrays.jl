@@ -8,6 +8,11 @@ import jBLAS: REGISTER_SIZE, CACHELINE_SIZE, Kernel, initkernel!, kernel!
 # or whatever unsafe views are called
 # needed for operations so we can ignore excess elemenents when necessary.
 
+export  SizedSIMDVector,
+        SizedSIMDMatrix,
+        SizedSIMDArray,
+        randsimd,
+        randnsimd
 
 # Would sorta make sense for this to depend on SIMD?
 # Or would I rather, at least for now, just wrap functions in BLAS calls?
