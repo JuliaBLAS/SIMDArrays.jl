@@ -36,19 +36,34 @@ L, number of elements (including buffer zeros).
 mutable struct SizedSIMDArray{S<:Tuple,T,N,R,L} <: AbstractSIMDArray{T,N}
     data::NTuple{L,T}
     function SizedSIMDArray{S,T,N,R,L}(::UndefInitializer) where {S,T,N,R,L}
-        #check_array_parameters(S, T, Val{N}, Val{L})
         new()
     end
     @generated function SizedSIMDArray{S,T}(::UndefInitializer) where {S,T}
         SV = S.parameters
         N = length(SV)
-        Stup = ntuple(n -> sv[n], N)#unstable
+        Stup = ntuple(n -> SV[n], N)#unstable
         R, L = calculate_L_from_size(SV)
         quote
             out = SizedSIMDArray{$S,$T,$N,$R,$L}(undef)
             Base.Cartesian.@nloops $(N-1) i n -> 1:$Stup[n+1] begin
                 @inbounds for i_0 = $(SV[1]+1:R)
-                    ( Base.Cartesian.@nref $N out n -> i_{n-1} ) = $(zero(T))
+                    ( Base.Cartesian.@nref $N out n -> i_{n-1} ) = zero($T)
+                end
+            end
+            out
+        end
+        # :(SizedSIMDArray{$S,$T,$N,$R,$L}(undef))
+    end
+    @generated function SizedSIMDArray{S,T,N}(::UndefInitializer) where {S,T,N}
+        SV = S.parameters
+        N = length(SV)
+        Stup = ntuple(n -> SV[n], Val(N))
+        R, L = calculate_L_from_size(SV)
+        quote
+            out = SizedSIMDArray{$S,$T,$N,$R,$L}(undef)
+            Base.Cartesian.@nloops $(N-1) i n -> 1:$Stup[n+1] begin
+                @inbounds for i_0 = $(SV[1]+1:R)
+                    ( Base.Cartesian.@nref $N out n -> i_{n-1} ) = zero($T)
                 end
             end
             out
@@ -73,7 +88,8 @@ end
     # :(SizedSIMDArray{$SD,$T,$N,$R,$L}(undef))
 end
 
-const SizedSIMDVector{N,T,R,L} = SizedSIMDArray{Tuple{N},T,1,R,L}
+
+const SizedSIMDVector{N,T,L} = SizedSIMDArray{Tuple{N},T,1,L,L}
 const SizedSIMDMatrix{M,N,T,R,L} = SizedSIMDArray{Tuple{M,N},T,2,R,L}
 struct StaticSIMDArray{S<:Tuple,T,N,R,L} <: AbstractSIMDArray{T,N}
     data::NTuple{L,T}
@@ -127,6 +143,9 @@ function sub2ind_expr(S::NTuple{N}, R) where N
     end
     :(i[1] - 1 + $R * $ex)
 end
+function sub2ind_expr(S::NTuple{1}, R) where N
+    :(i[1] - 1)
+end
 @generated function Base.getindex(A::SizedSIMDArray{S,T,N,R,L}, i::Vararg{Int,N}) where {S,T,N,R,L}
     dims = ntuple(j -> S.parameters[j], Val(N))
     ex = sub2ind_expr(dims, R)
@@ -151,7 +170,11 @@ end
         unsafe_load(pointer(A), $ex+1)
     end
 end
-@inline function Base.setindex!(A::SizedSIMDArray{S,T,N,R,L}, v, i) where {S,T,N,R,L}
+@inline function Base.setindex!(A::SizedSIMDArray{S,T,N,R,L}, v::T, i::Int) where {S,T,N,R,L}
+    @boundscheck i < L
+    unsafe_store!(pointer(A), v, i)
+end
+@inline function Base.setindex!(A::SizedSIMDArray{S,T,1,R,L}, v::T, i::Int) where {S,T,N,R,L}
     @boundscheck i < L
     unsafe_store!(pointer(A), v, i)
 end
@@ -166,7 +189,7 @@ end
         unsafe_store!(pointer(A), v, $ex+1)
     end
 end
-@generated function Base.setindex!(A::SizedSIMDArray{S,T,N,R,L}, v, i::Vararg{Int,N}) where {S,T,N,R,L}
+@generated function Base.setindex!(A::SizedSIMDArray{S,T,N,R,L}, v, i::Vararg{Integer,N}) where {S,T,N,R,L}
     dims = ntuple(j -> S.parameters[j], Val(N))
     ex = sub2ind_expr(dims, R)
     quote
@@ -214,7 +237,7 @@ setfirstindex(tup::NTuple{N,T}, val::T) where {N,T}  = ntuple(j -> j == 1 ? val 
 
 # defauling to IndexCartesian() at the moment
 # I want @eachindex when we only have two SIMDArrays to bring us to all elements.
-# Base.IndexStyle(::Type{<:AbstractSIMDArray}) = IndexLinear()
+Base.IndexStyle(::Type{<:AbstractSIMDArray}, ::Type{<:AbstractSIMDArray}) = IndexLinear()
 # Base.IndexStyle(::AbstractSIMDArray, ::AbstractArray) = IndexCartesian()
 # Base.IndexStyle(::AbstractArray, ::AbstractSIMDArray) = IndexCartesian()
 # Base.IndexStyle(::AbstractSIMDArray, ::AbstractArray, ::AbstractArray) = IndexCartesian()
@@ -235,3 +258,23 @@ struct PtrMatrix{M,N,T,Stride}
 end
 @inline Base.pointer(ptr::PtrMatrix) = ptr.ptr
 # const SIMDMat{M,N,T,Stride} = Union{SizedSIMDMatrix{M,N,T,Stride},PtrMatrix{M,N,T,Stride}}
+
+
+
+
+# @generated function Base.similar(::SizedSIMDArray{S},::Type{T}) where {S,T}
+#     SV = S.parameters
+#     N = length(SV)
+#     Stup = ntuple(n -> SV[n], N)#unstable
+#     R, L = calculate_L_from_size(SV)
+#     quote
+#         out = SizedSIMDArray{$S,$T,$N,$R,$L}(undef)
+#         Base.Cartesian.@nloops $(N-1) i n -> 1:$Stup[n+1] begin
+#             @inbounds for i_0 = $(SV[1]+1:R)
+#                 ( Base.Cartesian.@nref $N out n -> i_{n-1} ) = $(zero(T))
+#             end
+#         end
+#         out
+#     end
+#     # :(SizedSIMDArray{$S,$T,$N,$R,$L}(undef))
+# end

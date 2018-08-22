@@ -23,6 +23,12 @@ end
 
     mulquote(ADR,N,P,ADR,XR,T)
 end
+@generated function LinearAlgebra.mul!(D::SizedSIMDVector{M,T,ADR},
+                            A::SizedSIMDMatrix{M,N,T,ADR},
+                            X::SizedSIMDVector{N,T,XR}) where {M,N,P,T,ADR,XR}
+
+    mulquote(ADR,N,1,ADR,XR,T)
+end
 @generated function LinearAlgebra.mul!(D::PtrMatrix{M,P,T,ADR},
                             A::PtrMatrix{M,N,T,ADR},
                             X::PtrMatrix{N,P,T,XR}) where {M,N,P,T,ADR,XR}
@@ -125,82 +131,6 @@ function unrolled_kernel_quote(M,N,Pₖ,stride_AD,stride_X,T)
     end
 end
 
-function block_loop_quote_prefetch(L1M,L1N,L1P,stride_AD,stride_X,M_iter,M_remain,P_iter,P_remain,T_size,kernel=:kernel!,pA=:pAₙ,pX=:pXₙ,pD=:pD)
-
-    if M_remain == 0
-        D = :($pD + $(T_size*L1M)*mᵢ + $(T_size*L1P*stride_AD)*pᵢ)
-        A = :($pA + $(T_size*L1M)*mᵢ)
-        X = :($pX + $(T_size*L1P*stride_AD)*pᵢ)
-        q = quote
-            for pᵢ ∈ 0:$(P_iter-1)
-                for mᵢ ∈ $(M_iter)-pᵢ:$(M_iter-1)
-                    $(kernel)($D, $A, $X, Kernel{$L1M,$L1P,$stride_AD,$stride_X,$L1N}())
-                end
-                for mᵢ ∈ 0:$(M_iter-1)-pᵢ
-                    $(kernel)($D, $A, $X, Kernel{$L1M,$L1P,$stride_AD,$stride_X,$L1N}())
-                end
-            end
-        end
-    else
-        D = :($pD + $(T_size*L1M)*mᵢ + $(T_size*L1P*stride_AD)*pᵢ)
-        A = :($pA + $(T_size*L1M)*mᵢ)
-        X = :($pX + $(T_size*L1P*stride_AD)*pᵢ)
-        D_r = :($pD + $(T_size*L1M*M_iter) + $(T_size*L1P*stride_AD)*pᵢ)
-        A_r = :($pA + $(T_size*L1M*M_iter))
-        q = quote
-            for mᵢ ∈ 0:$(M_iter-1)
-                $(kernel)($pD + $(T_size*L1M)*mᵢ, $A, $X, Kernel{$L1M,$L1P,$stride_AD,$stride_X,$L1N}())
-            end
-            $(kernel)($pD + $(T_size*L1M*M_iter), $A_r, $X, Kernel{$M_remain,$L1P,$stride_AD,$stride_X,$L1N}())
-            for pᵢ ∈ 1:$(P_iter-1)
-                for mᵢ ∈ $(M_iter+1)-pᵢ:$(M_iter-1)
-                    $(kernel)($D, $A, $X, Kernel{$L1M,$L1P,$stride_AD,$stride_X,$L1N}())
-                end
-                $(kernel)($D_r, $A_r, $X, Kernel{$M_remain,$L1P,$stride_AD,$stride_X,$L1N}())
-                for mᵢ ∈ 0:$(M_iter)-pᵢ
-                    $(kernel)($D, $A, $X, Kernel{$L1M,$L1P,$stride_AD,$stride_X,$L1N}())
-                end
-            end
-        end
-    end
-
-    if P_remain != 0
-        if M_remain == 0
-            D = :($pD + $(T_size*L1M)*mᵢ + $(T_size*L1P*stride_AD*P_iter))
-            A = :($pA + $(T_size*L1M)*mᵢ)
-            X = :($pX + $(T_size*L1P*stride_AD*P_iter))
-            push!(q.args,
-            quote
-                for mᵢ ∈ $(M_iter-P_iter):$(M_iter-1)
-                    $(kernel)($D, $A, $X, Kernel{$L1M,$P_remain,$stride_AD,$stride_X,$L1N}())
-                end
-                for mᵢ ∈ 0:$(M_iter-1-P_iter)
-                    $(kernel)($D, $A, $X, Kernel{$L1M,$P_remain,$stride_AD,$stride_X,$L1N}())
-                end
-            end
-            )
-        else
-            D = :($pD + $(T_size*L1M)*mᵢ + $(T_size*L1P*stride_AD*P_iter))
-            A = :($pA + $(T_size*L1M)*mᵢ)
-            X = :($pX + $(T_size*L1P*stride_AD*P_iter))
-            D_r = :($pD + $(T_size*L1M*M_iter) + $(T_size*L1P*stride_AD*P_iter))
-            A_r = :($pA + $(T_size*L1M*M_iter))
-            push!(q.args,
-            quote
-                for mᵢ ∈ $(M_iter+1-P_iter):$(M_iter-1)
-                    $(kernel)($D, $A, $X, Kernel{$L1M,$P_remain,$stride_AD,$stride_X,$L1N}())
-                end
-                $(kernel)($D_r, $A_r, $X, Kernel{$M_remain,$P_remain,$stride_AD,$stride_X,$L1N}())
-                for mᵢ ∈ 0:$(M_iter-P_iter)
-                    $(kernel)($D, $A, $X, Kernel{$L1M,$P_remain,$stride_AD,$stride_X,$L1N}())
-                end
-            end
-            )
-        end
-
-    end
-    q
-end
 function block_loop_quote(L1M,L1N,L1P,stride_AD,stride_X,M_iter,M_remain,P_iter,P_remain,T_size,kernel=:kernel!,pA=:pAₙ,pX=:pXₙ,pD=:pD)
 
     if M_remain == 0
@@ -348,7 +278,7 @@ function block_loop_quote(L1M,L1N,L1P,stride_AD,stride_X,M_iter,M_remain,P_iter,
     q
 end
 
-function cache_mulquote(M,N,P,stride_AD,stride_X,(L1M,L1N,L1P),::Type{T}, init = :initkernel!) where T
+function cache_mulquote(M,N,P,stride_AD,stride_X,(L1M,L1N,L1P),::Type{T}, init = :initkernel!, primary = :kernel!) where T
 
     M_iter, M_remain = divrem(M, L1M)
     N_iter, N_remain = divrem(N, L1N)
@@ -383,7 +313,7 @@ function cache_mulquote(M,N,P,stride_AD,stride_X,(L1M,L1N,L1P),::Type{T}, init =
             for n ∈ 1:$(N_iter-1)
                 pAₙ = pA + n*$(L1N * T_size * stride_AD)
                 pXₙ = pX + n*$(L1N * T_size)
-                $(block_loop_quote(L1M,L1N,L1P,stride_AD,stride_X,M_iter,M_remain,P_iter,P_remain,T_size,:kernel!,:pAₙ,:pXₙ,:pD))
+                $(block_loop_quote(L1M,L1N,L1P,stride_AD,stride_X,M_iter,M_remain,P_iter,P_remain,T_size,primary,:pAₙ,:pXₙ,:pD))
             end
         end
         )
@@ -393,7 +323,7 @@ function cache_mulquote(M,N,P,stride_AD,stride_X,(L1M,L1N,L1P),::Type{T}, init =
         quote
             pAₙ = pA + $(L1N * T_size * stride_AD)
             pXₙ = pX + $(L1N * T_size)
-            $(block_loop_quote(L1M,L1N,L1P,stride_AD,stride_X,M_iter,M_remain,P_iter,P_remain,T_size,:kernel!,:pAₙ,:pXₙ,:pD))
+            $(block_loop_quote(L1M,L1N,L1P,stride_AD,stride_X,M_iter,M_remain,P_iter,P_remain,T_size,primary,:pAₙ,:pXₙ,:pD))
         end
         )
     end
@@ -402,7 +332,7 @@ function cache_mulquote(M,N,P,stride_AD,stride_X,(L1M,L1N,L1P),::Type{T}, init =
         quote
             pAₙ = pA + $(L1N*N_iter * T_size * stride_AD)
             pXₙ = pX + $(L1N*N_iter * T_size)
-            $(block_loop_quote(L1M,N_remain,L1P,stride_AD,stride_X,M_iter,M_remain,P_iter,P_remain,T_size,:kernel!,:pAₙ,:pXₙ,:pD))
+            $(block_loop_quote(L1M,N_remain,L1P,stride_AD,stride_X,M_iter,M_remain,P_iter,P_remain,T_size,primary,:pAₙ,:pXₙ,:pD))
         end
         )
     end

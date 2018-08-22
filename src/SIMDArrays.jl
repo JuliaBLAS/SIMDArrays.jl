@@ -1,6 +1,6 @@
 module SIMDArrays
 
-using jBLAS, LinearAlgebra, SIMD, Random
+using jBLAS, LinearAlgebra, SIMD, Random, Base.Cartesian
 using UnsafeArrays
 # Base.mightalias(A::UnsafeArray, B::UnsafeArray) = false
 
@@ -12,7 +12,8 @@ export  SizedSIMDVector,
         SizedSIMDMatrix,
         SizedSIMDArray,
         randsimd,
-        randnsimd
+        randnsimd,
+        SymmetricMatrix # not really supported yet.
 
 # Would sorta make sense for this to depend on SIMD?
 # Or would I rather, at least for now, just wrap functions in BLAS calls?
@@ -21,5 +22,7 @@ export  SizedSIMDVector,
 include("simd_arrays.jl")
 include("blas.jl")
 include("random.jl")
+# include("instantiation.jl")
+include("miscellaneous.jl")
 
 end # module
