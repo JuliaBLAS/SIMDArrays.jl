@@ -13,7 +13,8 @@ export  SizedSIMDVector,
         SizedSIMDArray,
         randsimd,
         randnsimd,
-        SymmetricMatrix # not really supported yet.
+        SymmetricMatrix,
+        full_length # not really supported yet.
 
 # Would sorta make sense for this to depend on SIMD?
 # Or would I rather, at least for now, just wrap functions in BLAS calls?

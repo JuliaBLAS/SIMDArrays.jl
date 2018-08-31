@@ -88,7 +88,8 @@ end
     # :(SizedSIMDArray{$SD,$T,$N,$R,$L}(undef))
 end
 
-
+@inline full_length(::SizedSIMDArray{S,T,N,R,L}) where {S,T,N,R,L} = L
+@inline full_length(x) = length(x)
 const SizedSIMDVector{N,T,L} = SizedSIMDArray{Tuple{N},T,1,L,L}
 const SizedSIMDMatrix{M,N,T,R,L} = SizedSIMDArray{Tuple{M,N},T,2,R,L}
 struct StaticSIMDArray{S<:Tuple,T,N,R,L} <: AbstractSIMDArray{T,N}
@@ -112,6 +113,20 @@ const StaticSIMDMatrix{M,N,T,R,L} = StaticSIMDArray{Tuple{M,N},T,2,R,L}
 @inline Base.pointer(A::SIMDArray) = pointer(A.data)
 @inline Base.pointer(A::SizedSIMDArray{S,T}) where {S,T} = Base.unsafe_convert(Ptr{T}, pointer_from_objref(A))
 
+@inline Base.unsafe_convert(::Type{Ptr{T}}, A::SizedSIMDArray) = pointer(A)
+@generated function strides(A::SizedSIMDArray{S,T,N,R,L}) where {S,T,N,R,L}
+    SV = S.parameters
+    N = length(SV)
+    N == 1 && return (1,)
+    last = R
+    q = Expr(:tuple, 1, last)
+    for n ∈ 3:N
+        last *= SV[n-1]
+        push!(q.args, last)
+    end
+    q
+end
+
 @generated function Base.size(A::SIMDArray{T,N}) where {T,N}
     quote
         s = size(A.data)
@@ -129,9 +144,14 @@ to_tuple(S) = tuple(S.parameters...)
 
 @inline Base.getindex(A::SIMDArray, i...) = A.data[i...]
 @inline Base.setindex!(A::SIMDArray, v, i...) = A.data[i...] = v
-@inline function Base.getindex(A::SizedSIMDArray{S,T,N,R,L}, i::Int) where {S,T,N,R,L}
-    @boundscheck i < L
-    A.data[i]
+# @inline function Base.getindex(A::SizedSIMDArray{S,T,N,R,L}, i::Int) where {S,T,N,R,L}
+#     @boundscheck i < L
+#     A.data[i]
+# end
+@inline function Base.getindex(A::SizedSIMDArray, i::Int)
+    @boundscheck i < full_length(A)
+    T = eltype(A)
+    unsafe_load(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), i)
 end
 """
 Returns zero based index. Don't forget to add one when using with arrays instead of pointers.
@@ -155,7 +175,7 @@ end
         @boundscheck begin
             Base.Cartesian.@nif $(N+1) d->(i[d] > $dims[d]) d->throw(BoundsError()) d -> nothing
         end
-        unsafe_load(pointer(A), $ex+1)
+        unsafe_load(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), $ex+1)
     end
 end
 @generated function Base.getindex(A::SizedSIMDArray{S,T,N,R,L}, i::CartesianIndex{N}) where {S,T,N,R,L}
@@ -167,17 +187,23 @@ end
         @boundscheck begin
             Base.Cartesian.@nif $(N+1) d->(i[d] > $dims[d]) d->throw(BoundsError()) d -> nothing
         end
-        unsafe_load(pointer(A), $ex+1)
+        unsafe_load(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), $ex+1)
     end
 end
-@inline function Base.setindex!(A::SizedSIMDArray{S,T,N,R,L}, v::T, i::Int) where {S,T,N,R,L}
-    @boundscheck i < L
-    unsafe_store!(pointer(A), v, i)
+@inline function Base.setindex!(A::SizedSIMDArray, v, i::Int)
+    @boundscheck i < full_length(A)
+    T = eltype(A)
+    unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), i)
+    v
 end
-@inline function Base.setindex!(A::SizedSIMDArray{S,T,1,R,L}, v::T, i::Int) where {S,T,N,R,L}
-    @boundscheck i < L
-    unsafe_store!(pointer(A), v, i)
+@inline function Base.setindex!(A::SizedSIMDVector, v, i::Int)
+    @boundscheck i < full_length(A)
+    T = eltype(A)
+    unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), i)
+    v
 end
+
+
 @generated function Base.setindex!(A::SizedSIMDArray{S,T,N,R,L}, v, i::CartesianIndex{N}) where {S,T,N,R,L}
     dims = ntuple(j -> S.parameters[j], Val(N))
     ex = sub2ind_expr(dims, R)
@@ -186,7 +212,9 @@ end
         @boundscheck begin
             Base.Cartesian.@nif $(N+1) d->(i[d] > $dims[d]) d->throw(BoundsError()) d -> nothing
         end
-        unsafe_store!(pointer(A), v, $ex+1)
+        T = eltype(A)
+        unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), $ex+1)
+        v
     end
 end
 @generated function Base.setindex!(A::SizedSIMDArray{S,T,N,R,L}, v, i::Vararg{Integer,N}) where {S,T,N,R,L}
@@ -197,7 +225,9 @@ end
         @boundscheck begin
             Base.Cartesian.@nif $(N+1) d->(i[d] > $dims[d]) d->throw(BoundsError()) d -> nothing
         end
-        unsafe_store!(pointer(A), v, $ex+1)
+        T = eltype(A)
+        unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), $ex+1)
+        v
     end
 end
 
