@@ -1,7 +1,6 @@
 
 abstract type AbstractSIMDArray{T,N} <: AbstractArray{T,N} end
-
-
+abstract type AbstractSizedSIMDArray{S<:Tuple,T,N,R,L} <: AbstractSIMDArray{T,N}
 struct SIMDArray{T,N} <: AbstractSIMDArray{T,N}
     data::Array{T,N}
     nrows::Int
@@ -88,7 +87,7 @@ end
     # :(SizedSIMDArray{$SD,$T,$N,$R,$L}(undef))
 end
 
-@inline full_length(::SizedSIMDArray{S,T,N,R,L}) where {S,T,N,R,L} = L
+@inline full_length(::AbstractSizedSIMDArray{S,T,N,R,L}) where {S,T,N,R,L} = L
 @inline full_length(x) = length(x)
 const SizedSIMDVector{N,T,L} = SizedSIMDArray{Tuple{N},T,1,L,L}
 const SizedSIMDMatrix{M,N,T,R,L} = SizedSIMDArray{Tuple{M,N},T,2,R,L}
@@ -113,8 +112,8 @@ const StaticSIMDMatrix{M,N,T,R,L} = StaticSIMDArray{Tuple{M,N},T,2,R,L}
 @inline Base.pointer(A::SIMDArray) = pointer(A.data)
 @inline Base.pointer(A::SizedSIMDArray{S,T}) where {S,T} = Base.unsafe_convert(Ptr{T}, pointer_from_objref(A))
 
-@inline Base.unsafe_convert(::Type{Ptr{T}}, A::SizedSIMDArray) = pointer(A)
-@generated function strides(A::SizedSIMDArray{S,T,N,R,L}) where {S,T,N,R,L}
+@inline Base.unsafe_convert(::Type{Ptr{T}}, A::SizedSIMDArray) = Base.unsafe_convert(Ptr{T}, pointer_from_objref(A))
+@generated function strides(A::AbstractSizedSIMDArray{S,T,N,R,L}) where {S,T,N,R,L}
     SV = S.parameters
     N = length(SV)
     N == 1 && return (1,)
@@ -135,12 +134,12 @@ end
         Base.Cartesian.@ntuple $N s
     end
 end
-Base.size(::SizedSIMDArray{S}) where S = tuple(S.parameters...)
+Base.size(::AbstractSizedSIMDArray{S}) where S = tuple(S.parameters...)
 
 to_tuple(S) = tuple(S.parameters...)
 
 # Do we want this, or L?
-@generated Base.length(::SizedSIMDArray{S}) where S = prod(to_tuple(S))
+@generated Base.length(::AbstractSizedSIMDArray{S}) where S = prod(to_tuple(S))
 
 @inline Base.getindex(A::SIMDArray, i...) = A.data[i...]
 @inline Base.setindex!(A::SIMDArray, v, i...) = A.data[i...] = v
