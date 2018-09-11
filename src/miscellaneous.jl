@@ -5,8 +5,21 @@
     R, L = calculate_L_from_size(SV)
     quote
         out = SizedSIMDArray{$S,$T,$N,$R,$L}(undef)
-        for i ∈ 1:$L
+        @inbounds @simd for i ∈ 1:$L
             out[i] = zero($T)
+        end
+        out
+    end
+end
+
+@generated function Base.fill(::Type{<:SizedSIMDArray{S,T}}, v::T) where {S,T}
+    SV = S.parameters
+    N = length(SV)
+    R, L = calculate_L_from_size(SV)
+    quote
+        out = SizedSIMDArray{$S,$T,$N,$R,$L}(undef)
+        @inbounds @simd for i ∈ 1:$L #Here, we accept the risk that the buffer becomes subnormal?
+            out[i] = v
         end
         out
     end
@@ -238,6 +251,270 @@ end
 #     q
 # end
 
+@generated function reflect!(C::SizedSIMDArray{S,T,N,R,L}) where {S,T,N,R,L}
+    T_size = sizeof(T)
+    VL = min(REGISTER_SIZE ÷ T_size, L)
+    VLT = VL * T_size
+    V = Vec{VL,T}
+
+    iter = L ÷ VL
+    q = quote
+        ptr_C = pointer(C)
+        vB = $V($(T(-1)))
+    end
+
+    if iter <= 8
+        push!(q.args, :(vstore(vload($V, ptr_C) * vB, ptr_C)) )
+        for i ∈ 1:iter-1
+            offset = i*VLT
+            push!(q.args, :(vstore(vload($V, ptr_C + $offset) * vB, ptr_C + $offset)) )
+        end
+    else
+        rep, rem = divrem(iter, 4)
+        if (rep == 1 && rem == 0) || (rep >= 1 && rem != 0)
+            rep -= 1
+            rem += 4
+        end
+        push!(q.args,
+            quote
+                for i ∈ 0:$(4VLT):$(4VLT*(rep-1))
+                    vstore(vload($V, ptr_C + i) * vB, ptr_C + i)
+                    vstore(vload($V, ptr_C + i + $VLT) * vB, ptr_C + i + $VLT)
+                    vstore(vload($V, ptr_C + i + $(2VLT)) * vB, ptr_C + i + $(2VLT))
+                    vstore(vload($V, ptr_C + i + $(3VLT)) * vB, ptr_C + i + $(3VLT))
+                end
+            end
+        )
+        for i ∈ 1:rem
+            offset = VLT*(i + 4rep)
+            push!(q.args, :(vstore(vload($V, ptr_C + $offset) * vB, ptr_C + $offset)) )
+        end
+
+    end
+    push!(q.args, :(nothing))
+    q
+end
+@generated function reflect!(C::SizedSIMDArray{S,T,N,R,L}, A::SizedSIMDArray{S,T,N,R,L}) where {S,T,N,R,L}
+    T_size = sizeof(T)
+    VL = min(REGISTER_SIZE ÷ T_size, L)
+    VLT = VL * T_size
+    V = Vec{VL,T}
+
+    iter = L ÷ VL
+    q = quote
+        ptr_C = pointer(C)
+        ptr_A = pointer(A)
+        vB = $V($(T(-1)))
+    end
+
+    if iter <= 8
+        push!(q.args, :(vstore(vload($V, ptr_A) * vB, ptr_C)) )
+        for i ∈ 1:iter-1
+            offset = i*VLT
+            push!(q.args, :(vstore(vload($V, ptr_A + $offset) * vB, ptr_C + $offset)) )
+        end
+    else
+        rep, rem = divrem(iter, 4)
+        if (rep == 1 && rem == 0) || (rep >= 1 && rem != 0)
+            rep -= 1
+            rem += 4
+        end
+        push!(q.args,
+            quote
+                for i ∈ 0:$(4VLT):$(4VLT*(rep-1))
+                    vstore(vload($V, ptr_A + i) * vB, ptr_C + i)
+                    vstore(vload($V, ptr_A + i + $VLT) * vB, ptr_C + i + $VLT)
+                    vstore(vload($V, ptr_A + i + $(2VLT)) * vB, ptr_C + i + $(2VLT))
+                    vstore(vload($V, ptr_A + i + $(3VLT)) * vB, ptr_C + i + $(3VLT))
+                end
+            end
+        )
+        for i ∈ 1:rem
+            offset = VLT*(i + 4rep)
+            push!(q.args, :(vstore(vload($V, ptr_A + $offset) * vB, ptr_C + $offset)) )
+        end
+
+    end
+    push!(q.args, :(nothing))
+    q
+end
+@generated function scale!(C::SizedSIMDArray{S,T,N,R,L}, A::SizedSIMDArray{S,T,N,R,L}, B::T) where {S,T,N,R,L}
+    T_size = sizeof(T)
+    VL = min(REGISTER_SIZE ÷ T_size, L)
+    VLT = VL * T_size
+    V = Vec{VL,T}
+
+    iter = L ÷ VL
+    q = quote
+        ptr_C = pointer(C)
+        ptr_A = pointer(A)
+        vB = $V(B)
+    end
+
+    if iter <= 8
+        push!(q.args, :(vstore(vload($V, ptr_A) * vB, ptr_C)) )
+        for i ∈ 1:iter-1
+            offset = i*VLT
+            push!(q.args, :(vstore(vload($V, ptr_A + $offset) * vB, ptr_C + $offset)) )
+        end
+    else
+        rep, rem = divrem(iter, 4)
+        if (rep == 1 && rem == 0) || (rep >= 1 && rem != 0)
+            rep -= 1
+            rem += 4
+        end
+        push!(q.args,
+            quote
+                for i ∈ 0:$(4VLT):$(4VLT*(rep-1))
+                    vstore(vload($V, ptr_A + i) * vB, ptr_C + i)
+                    vstore(vload($V, ptr_A + i + $VLT) * vB, ptr_C + i + $VLT)
+                    vstore(vload($V, ptr_A + i + $(2VLT)) * vB, ptr_C + i + $(2VLT))
+                    vstore(vload($V, ptr_A + i + $(3VLT)) * vB, ptr_C + i + $(3VLT))
+                end
+            end
+        )
+        for i ∈ 1:rem
+            offset = VLT*(i + 4rep)
+            push!(q.args, :(vstore(vload($V, ptr_A + $offset) * vB, ptr_C + $offset)) )
+        end
+
+    end
+    push!(q.args, :(nothing))
+    q
+end
+@generated function vsub!(C::SizedSIMDArray{S,T,N,R,L}, A::SizedSIMDArray{S,T,N,R,L}, B::SizedSIMDArray{S,T,N,R,L}) where {S,T,N,R,L}
+    T_size = sizeof(T)
+    VL = min(REGISTER_SIZE ÷ T_size, L)
+    VLT = VL * T_size
+    V = Vec{VL,T}
+
+    iter = L ÷ VL
+    q = quote
+        ptr_C = pointer(C)
+        ptr_A = pointer(A)
+        ptr_B = pointer(B)
+    end
+
+    if iter <= 8
+        push!(q.args, :(vstore(vload($V, ptr_A) - vload($V, ptr_B), ptr_C)) )
+        for i ∈ 1:iter-1
+            offset = i*VLT
+            push!(q.args, :(vstore(vload($V, ptr_A + $offset) - vload($V, ptr_B + $offset), ptr_C + $offset)) )
+        end
+    else
+        rep, rem = divrem(iter, 4)
+        if (rep == 1 && rem == 0) || (rep >= 1 && rem != 0)
+            rep -= 1
+            rem += 4
+        end
+        push!(q.args,
+            quote
+                for i ∈ 0:$(4VLT):$(4VLT*(rep-1))
+                    vstore(vload($V, ptr_A + i) - vload($V, ptr_B + i), ptr_C + i)
+                    vstore(vload($V, ptr_A + i + $VLT) - vload($V, ptr_B + i + $VLT), ptr_C + i + $VLT)
+                    vstore(vload($V, ptr_A + i + $(2VLT)) - vload($V, ptr_B + i + $(2VLT)), ptr_C + i + $(2VLT))
+                    vstore(vload($V, ptr_A + i + $(3VLT)) - vload($V, ptr_B + i + $(3VLT)), ptr_C + i + $(3VLT))
+                end
+            end
+        )
+        for i ∈ 1:rem
+            offset = VLT*(i + 4rep)
+            push!(q.args, :(vstore(vload($V, ptr_A + $offset) - vload($V, ptr_B + $offset), ptr_C + $offset)) )
+        end
+
+    end
+    push!(q.args, :(nothing))
+    q
+end
+@generated function vadd!(C::SizedSIMDArray{S,T,N,R,L}, A::SizedSIMDArray{S,T,N,R,L}, B::SizedSIMDArray{S,T,N,R,L}) where {S,T,N,R,L}
+    T_size = sizeof(T)
+    VL = min(REGISTER_SIZE ÷ T_size, L)
+    VLT = VL * T_size
+    V = Vec{VL,T}
+
+    iter = L ÷ VL
+    q = quote
+        ptr_C = pointer(C)
+        ptr_A = pointer(A)
+        ptr_B = pointer(B)
+    end
+
+    if iter <= 8
+        push!(q.args, :(vstore(vload($V, ptr_A) + vload($V, ptr_B), ptr_C)) )
+        for i ∈ 1:iter-1
+            offset = i*VLT
+            push!(q.args, :(vstore(vload($V, ptr_A + $offset) + vload($V, ptr_B + $offset), ptr_C + $offset)) )
+        end
+    else
+        rep, rem = divrem(iter, 4)
+        if (rep == 1 && rem == 0) || (rep >= 1 && rem != 0)
+            rep -= 1
+            rem += 4
+        end
+        push!(q.args,
+            quote
+                for i ∈ 0:$(4VLT):$(4VLT*(rep-1))
+                    vstore(vload($V, ptr_A + i) + vload($V, ptr_B + i), ptr_C + i)
+                    vstore(vload($V, ptr_A + i + $VLT) + vload($V, ptr_B + i + $VLT), ptr_C + i + $VLT)
+                    vstore(vload($V, ptr_A + i + $(2VLT)) + vload($V, ptr_B + i + $(2VLT)), ptr_C + i + $(2VLT))
+                    vstore(vload($V, ptr_A + i + $(3VLT)) + vload($V, ptr_B + i + $(3VLT)), ptr_C + i + $(3VLT))
+                end
+            end
+        )
+        for i ∈ 1:rem
+            offset = VLT*(i + 4rep)
+            push!(q.args, :(vstore(vload($V, ptr_A + $offset) + vload($V, ptr_B + $offset), ptr_C + $offset)) )
+        end
+
+    end
+    push!(q.args, :(nothing))
+    q
+end
+@generated function vadd!(C::SizedSIMDArray{S,T,N,R,L}, A::SizedSIMDArray{S,T,N,R,L}, α::T, B::SizedSIMDArray{S,T,N,R,L}) where {S,T,N,R,L}
+    T_size = sizeof(T)
+    VL = min(REGISTER_SIZE ÷ T_size, L)
+    VLT = VL * T_size
+    V = Vec{VL,T}
+
+    iter = L ÷ VL
+    q = quote
+        ptr_C = pointer(C)
+        ptr_A = pointer(A)
+        ptr_B = pointer(B)
+        vα = $V(α)
+    end
+
+    if iter <= 8
+        push!(q.args, :(vstore(fma(vload($V, ptr_B),vα,vload($V, ptr_A)), ptr_C)) )
+        for i ∈ 1:iter-1
+            offset = i*VLT
+            push!(q.args, :(vstore(fma(vload($V, ptr_B + $offset), vα, vload($V, ptr_A + $offset)), ptr_C + $offset)) )
+        end
+    else
+        rep, rem = divrem(iter, 4)
+        if (rep == 1 && rem == 0) || (rep >= 1 && rem != 0)
+            rep -= 1
+            rem += 4
+        end
+        push!(q.args,
+            quote
+                for i ∈ 0:$(4VLT):$(4VLT*(rep-1))
+                    vstore(fma(vload($V, ptr_B + i),vα,vload($V, ptr_A + i)), ptr_C + i)
+                    vstore(fma(vload($V, ptr_B + i + $VLT),vα,vload($V, ptr_A + i + $VLT)), ptr_C + i + $VLT)
+                    vstore(fma(vload($V, ptr_B + i + $(2VLT)),vα,vload($V, ptr_A + i + $(2VLT))), ptr_C + i + $(2VLT))
+                    vstore(fma(vload($V, ptr_B + i + $(3VLT)),vα,vload($V, ptr_A + i + $(3VLT))), ptr_C + i + $(3VLT))
+                end
+            end
+        )
+        for i ∈ 1:rem
+            offset = VLT*(i + 4rep)
+            push!(q.args, :(vstore(fma(vload($V, ptr_B + $offset), vα, vload($V, ptr_A + $offset)), ptr_C + $offset)) )
+        end
+
+    end
+    push!(q.args, :(nothing))
+    q
+end
 
 
 
