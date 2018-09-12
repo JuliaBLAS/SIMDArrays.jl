@@ -517,15 +517,15 @@ end
 end
 
 
-
 @inline Base.pointer(x::Symmetric{T,SizedSIMDMatrix{P,P,T,R,L}}) where {P,T,R,L} = pointer(x.data)
+
 function BFGS_update_quote(Mₖ,Pₖ,stride_AD,T)
     T_size = sizeof(T)
     AD_stride = stride_AD * T_size
     W = REGISTER_SIZE ÷ T_size
-    Q, r = divrem(Mₖ, W) #Assuming Mₖ is a multiple of W
+    Q, r = divrem(stride_AD, W) #Assuming stride_AD is a multiple of W
     if Q > 0
-        r == 0 || throw("Number of rows $Mₖ not a multiple of register size: $REGISTER_SIZE.")
+        r == 0 || throw("Number of rows plus padding $stride_AD not a multiple of register size: $REGISTER_SIZE.")
         L = CACHELINE_SIZE
     else
         W = r
@@ -533,7 +533,6 @@ function BFGS_update_quote(Mₖ,Pₖ,stride_AD,T)
     end
     V = Vec{W,T}
     C = CACHELINE_SIZE ÷ T_size
-    Qₚ = Mₖ ÷ C
     common = quote
         vC1 = $V(c1)
         vC2 = $V(-c2)
