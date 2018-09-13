@@ -134,9 +134,9 @@ end
         Base.Cartesian.@ntuple $N s
     end
 end
-Base.size(::AbstractSizedSIMDArray{S}) where S = tuple(S.parameters...)
-
 to_tuple(S) = tuple(S.parameters...)
+@generated Base.size(::AbstractSizedSIMDArray{S}) where S = to_tuple(S)
+
 
 # Do we want this, or L?
 @generated Base.length(::AbstractSizedSIMDArray{S}) where S = prod(to_tuple(S))

@@ -24,6 +24,13 @@ end
         out
     end
 end
+function Base.fill!(A::SizedSIMDArray{S,T,N,R,L}, x) where {S<:Tuple,T,N,R,L}
+    xt = convert(T,x)
+    @inbounds @simd for i ∈ 1:L
+        A[i] = xt
+    end
+    A
+end
 
 @generated function Base.similar(::SizedSIMDArray{S,T}, v::Vararg{Int,N}) where {S,T,N}
     :(SizedSIMDArray(undef, Val(v), $T))
