@@ -135,6 +135,15 @@ function store_L_quote!(qa, P, output = :Li) # N x N block, with stride S.
     end
     push!(qa, :(nothing))
 end
+function store_L_prepad_quote!(qa, P, pad, output = :Li) # N x N block, with stride S.
+    for c ∈ 1:P
+        push!(qa, :($output[$c, $c] = $(sym(output, c, c))) )
+        for r ∈ c+1:P
+            push!(qa, :($output[$(r+pad), $c] = $(sym(output, r, c))))
+        end
+    end
+    push!(qa, :(nothing))
+end
 @generated function inv_L_triangle!(Li::SizedSIMDMatrix{P,P,T}, L::SizedSIMDMatrix{P,P,T}) where {P,T}
     q = quote @fastmath @inbounds begin end end
     qa = q.args[2].args[3].args[3].args
@@ -397,16 +406,30 @@ end
     push!(qa, :(cdet))
     q
 end
-@generated function invcholdet!(L::SizedSIMDMatrix{M,M,T}, S::SizedSIMDMatrix{N,N,T}) where {M,N,T}
+@generated function invcholdet!(L::SizedSIMDMatrix{MpPad,M,T}, S::SizedSIMDMatrix{N,N,T}) where {MpPad,M,N,T}
     P = min(M,N)
     q = quote @fastmath @inbounds begin end end
     qa = q.args[2].args[3].args[3].args
     load_L_quote!(qa, P, :S, :S)
     invcholdet_L_core_quote!(qa, P, :L, :S, T)
-    store_L_quote!(qa, P, :L)
+    if M == MpPad
+        store_L_quote!(qa, P, :L)
+    else
+        store_L_prepad_quote!(qa, P, MpPad - P, :L)
+    end
     push!(qa, :(cdet))
     q
 end
+# @generated function invcholdet!(L::SizedSIMDMatrix{M,M,T}, S::SizedSIMDMatrix{N,N,T}) where {M,N,T}
+#     P = min(M,N)
+#     q = quote @fastmath @inbounds begin end end
+#     qa = q.args[2].args[3].args[3].args
+#     load_L_quote!(qa, P, :S, :S)
+#     invcholdet_L_core_quote!(qa, P, :L, :S, T)
+#     store_L_quote!(qa, P, :L)
+#     push!(qa, :(cdet))
+#     q
+# end
 @generated function invcholdet!(L::SizedSIMDMatrix{M,M,T}, ::Val{P}) where {M,P,T}
     q = quote @fastmath @inbounds begin end end
     qa = q.args[2].args[3].args[3].args
