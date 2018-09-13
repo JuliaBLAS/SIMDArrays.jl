@@ -137,7 +137,7 @@ function store_L_quote!(qa, P, output = :Li) # N x N block, with stride S.
 end
 function store_L_prepad_quote!(qa, P, pad, output = :Li) # N x N block, with stride S.
     for c ∈ 1:P
-        push!(qa, :($output[$c, $c] = $(sym(output, c, c))) )
+        push!(qa, :($output[$(c+pad), $c] = $(sym(output, c, c))) )
         for r ∈ c+1:P
             push!(qa, :($output[$(r+pad), $c] = $(sym(output, r, c))))
         end

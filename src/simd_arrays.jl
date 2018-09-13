@@ -162,12 +162,11 @@ function sub2ind_expr(S, R)
     for i ∈ (N - 1):-1:2
         ex = :(i[$i] - 1 + $(S[i]) * $ex)
     end
-    :(i[1] - 1 + $R * $ex)
+    :(i[1] + $R * $ex)
 end
 
 @generated function Base.getindex(A::SizedSIMDArray{S,T,N,R,L}, i::Vararg{Int,N}) where {S,T,N,R,L}
     # dims = ntuple(j -> S.parameters[j], Val(N))
-    # ex = sub2ind_expr(dims, R)
     sv = S.parameters
     ex = sub2ind_expr(sv, R)
     quote
@@ -178,8 +177,8 @@ end
         end
         T = eltype(A)
         # unsafe_load(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A) + $(sizeof(T))*($ex) ))
-        A.data[$ex+1]
-        # unsafe_load(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), $ex+1)
+        # A.data[$ex+1]
+        unsafe_load(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), $ex)
     end
 end
 @generated function Base.getindex(A::SizedSIMDArray{S,T,N,R,L}, i::CartesianIndex{N}) where {S,T,N,R,L}
@@ -191,7 +190,7 @@ end
         @boundscheck begin
             Base.Cartesian.@nif $(N+1) d->(d == 1 ? i[d] > $R : i[d] > $dims[d]) d->throw(BoundsError()) d -> nothing
         end
-        unsafe_load(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), $ex+1)
+        unsafe_load(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), $ex)
     end
 end
 @inline function Base.setindex!(A::SizedSIMDArray, v, i::Int)
@@ -217,7 +216,7 @@ end
             Base.Cartesian.@nif $(N+1) d->( d == 1 ? i[d] > $R : i[d] > $dims[d]) d->throw(BoundsError("Dimension $d out of bounds")) d -> nothing
         end
         T = eltype(A)
-        unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), $ex+1)
+        unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), $ex)
         v
     end
 end
@@ -230,7 +229,7 @@ end
             Base.Cartesian.@nif $(N+1) d->( d == 1 ? i[d] > $R : i[d] > $dims[d]) d->throw(BoundsError("Dimension $d out of bounds $(i[d]) > $R")) d -> nothing
         end
         T = eltype(A)
-        unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), $ex+1)
+        unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), $ex)
         v
     end
 end
