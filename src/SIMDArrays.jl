@@ -5,7 +5,9 @@ using UnsafeArrays
 using ForwardDiff
 # Base.mightalias(A::UnsafeArray, B::UnsafeArray) = false
 
-import jBLAS: REGISTER_SIZE, CACHELINE_SIZE, Kernel, initkernel!, kernel!
+import  jBLAS: REGISTER_SIZE, CACHELINE_SIZE,
+        Kernel, initkernel!, kernel!,
+        PrefetchA, PrefetchX, PrefetchAX
 # or whatever unsafe views are called
 # needed for operations so we can ignore excess elemenents when necessary.
 
