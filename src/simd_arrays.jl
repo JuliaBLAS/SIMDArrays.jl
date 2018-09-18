@@ -74,7 +74,8 @@ end
 @generated function SizedSIMDArray(::UndefInitializer, ::Val{S}, ::Type{T}=Float64) where {S,T}
     N = length(S)
     R, L = calculate_L_from_size(S)
-    SD = Expr(:curly, :Tuple, S...)
+    # SD = Expr(:curly, :Tuple, S...)
+    SD = Tuple{S...}
     quote
         out = SizedSIMDArray{$SD,$T,$N,$R,$L}(undef)
         Base.Cartesian.@nloops $(N-1) i n -> 1:$S[n+1] begin
@@ -85,6 +86,13 @@ end
         out
     end
     # :(SizedSIMDArray{$SD,$T,$N,$R,$L}(undef))
+end
+
+# Not type stable!
+function SizedSIMDArray(A::AbstractArray{T,N}) where {T,N}
+    out = SizedSIMDArray{Tuple{size(A)...},T,N}(undef)
+    copyto!(out, A)
+    out
 end
 
 @inline full_length(::AbstractSizedSIMDArray{S,T,N,R,L}) where {S,T,N,R,L} = L
@@ -292,6 +300,20 @@ end
 @inline Base.pointer(ptr::PtrMatrix) = ptr.ptr
 # const SIMDMat{M,N,T,Stride} = Union{SizedSIMDMatrix{M,N,T,Stride},PtrMatrix{M,N,T,Stride}}
 
+@generated function jBLAS.prefetch(A::PtrMatrix{M,P,T,stride}, ::Val{RoW}) where {M,P,T,stride, RoW}
+    T_size = sizeof(T)
+    T_stride = stride * T_size
+    CL = CACHELINE_SIZE ÷ T_size
+    Q, r = divrem(M, CL) #Assuming L2M is a multiple of W
+    quote
+        # for p = 0:$(P-1), q = 0:$(Q-1)
+        #     prefetch(A.ptr + q * $CACHELINE_SIZE + $T_stride * p, Val{2}(), Val{$RoW}())
+        # end
+        for p = 0:$(P-1)
+            prefetch(A.ptr + $T_stride * p, Val{2}(), Val{$RoW}())
+        end
+    end
+end
 
 
 

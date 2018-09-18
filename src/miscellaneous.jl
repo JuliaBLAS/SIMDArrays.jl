@@ -77,6 +77,18 @@ function Base.copyto!(out::SizedSIMDVector, A::AbstractArray)
     end
     out
 end
+@generated function Base.copyto!(out::SizedSIMDArray{S,T,N}, A::AbstractArray{T,N}) where {S,T,N}
+    s = (S.parameters...,)
+    quote
+        #$(Expr(:meta, :propagate_inbounds))
+        #@boundscheck $s == size(A) || throw(BoundsError())
+        @inbounds Base.Cartesian.@nloops $N n d -> 1:($s)[d] begin
+            (Base.Cartesian.@nref $N out n) = (Base.Cartesian.@nref $N A n)
+        end
+        out
+    end
+end
+
 const SymmetricMatrix{P,T} = Symmetric{T, <: SizedSIMDMatrix{P,P,T}}
 function Base.setindex!(S::SymmetricMatrix{P,T}, v, i::Integer, j::Integer) where {P,T}
     @boundscheck begin
