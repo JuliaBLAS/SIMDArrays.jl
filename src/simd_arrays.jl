@@ -1,6 +1,11 @@
 
 abstract type AbstractSIMDArray{T,N} <: AbstractArray{T,N} end
 abstract type AbstractSizedSIMDArray{S<:Tuple,T,N,R,L} <: AbstractSIMDArray{T,N} end
+const AbstractSizedSIMDVector{N,T,R,L} = AbstractSizedSIMDArray{Tuple{N},T,1,R,L}
+const AbstractSizedSIMDMatrix{M,N,T,R,L} = AbstractSizedSIMDArray{Tuple{M,N},T,2,R,L}
+
+
+
 struct SIMDArray{T,N} <: AbstractSIMDArray{T,N}
     data::Array{T,N}
     nrows::Int
@@ -55,7 +60,7 @@ mutable struct SizedSIMDArray{S<:Tuple,T,N,R,L} <: AbstractSizedSIMDArray{S,T,N,
     end
     @generated function SizedSIMDArray{S,T,N}(::UndefInitializer) where {S,T,N}
         SV = S.parameters
-        N = length(SV)
+        # N = length(SV)
         Stup = ntuple(n -> SV[n], Val(N))
         R, L = calculate_L_from_size(SV)
         quote
@@ -294,9 +299,27 @@ Base.IndexStyle(::Type{<:AbstractSIMDArray}, ::Type{<:AbstractSIMDArray}) = Inde
 This is only meant to make recursive algorithms easiesr to implement.
 Wraps a pointer, while passing info on the size of the block and stride.
 """
-struct PtrMatrix{M,N,T,Stride}
+struct PtrArray{S,T,N,R,L} <: AbstractSizedSIMDArray{S,T,N,R,L}
     ptr::Ptr{T}
+    @generated function PtrArray{S,T,N,R}(ptr::Ptr{T}) where {S,T,N,R}
+        L = R
+        for i ∈ 2:N
+            L *= S.parameters[i]
+        end
+        :(PtrArray{$S,$T,$N,$R,$L}(ptr))
+    end
+    @generated function PtrArray{S,T}(ptr::Ptr{T}) where {S,T}
+        SV = S.parameters
+        N = length(SV)
+        R, L = calculate_L_from_size(SV)
+        :(PtrArray{$S,$T,$N,$R,$L}(ptr))
+    end
 end
+const PtrVector{N,T,R,L} = PtrArray{Tuple{N},T,1,R,L} # R and L will always be the same...
+const PtrMatrix{M,N,T,R,L} = PtrArray{Tuple{M,N},T,2,R,L}
+# struct PtrMatrix{M,N,T,Stride}
+#     ptr::Ptr{T}
+# end
 @inline Base.pointer(ptr::PtrMatrix) = ptr.ptr
 # const SIMDMat{M,N,T,Stride} = Union{SizedSIMDMatrix{M,N,T,Stride},PtrMatrix{M,N,T,Stride}}
 
