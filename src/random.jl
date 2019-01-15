@@ -77,6 +77,9 @@ end
     u_exprs
 end
 
+function Random.rand(::Type{<: SizedSIMDArray{S,T}}) where {S,T}
+    rand!(SizedSIMDArray{S,T}(undef))
+end
 
 Base.@pure randnsimd(S...) = randnsimd(Float64, Val{S}())
 Base.@pure randnsimd(::Type{T}, S...) where T  = randnsimd(T, Val{S}())
@@ -87,6 +90,10 @@ randnsimd(::Type{T}, ::Val{S}) where {S,T} = randn!(SizedSIMDArray(undef, Val(S)
         A
     end
 end
+function Random.randn(::Type{<: SizedSIMDArray{S,T}}) where {S,T}
+    randn!(SizedSIMDArray{S,T}(undef))
+end
+
 @generated function Random.randn!(A::SizedSIMDArray{S,T,N,R,L}) where {S,T<:Union{Float32,Float64},N,R,L}
     size_T = sizeof(T)
     W = VectorizationBase.pick_vector_width(L, T)
