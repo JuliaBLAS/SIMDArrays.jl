@@ -1,3 +1,5 @@
+# This file is machine-generated - editing it directly is not advised
+
 [[Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
@@ -9,9 +11,9 @@ version = "0.8.10"
 
 [[BinaryProvider]]
 deps = ["Libdl", "Pkg", "SHA", "Test"]
-git-tree-sha1 = "b530fbeb6f41ab5a83fbe3db1fcbe879334bcd2d"
+git-tree-sha1 = "055eb2690182ebc31087859c3dd8598371d3ef9e"
 uuid = "b99e7846-7c00-51b0-8f62-c81ae34c0232"
-version = "0.4.2"
+version = "0.5.3"
 
 [[CommonSubexpressions]]
 deps = ["Test"]
@@ -21,12 +23,12 @@ version = "0.2.0"
 
 [[Compat]]
 deps = ["Base64", "Dates", "DelimitedFiles", "Distributed", "InteractiveUtils", "LibGit2", "Libdl", "LinearAlgebra", "Markdown", "Mmap", "Pkg", "Printf", "REPL", "Random", "Serialization", "SharedArrays", "Sockets", "SparseArrays", "Statistics", "Test", "UUIDs", "Unicode"]
-git-tree-sha1 = "ae262fa91da6a74e8937add6b613f58cd56cdad4"
+git-tree-sha1 = "ec61a16eed883ad0cfa002d7489b3ce6d039bb9a"
 uuid = "34da2185-b29b-5c13-b0c7-acf172513d20"
-version = "1.1.0"
+version = "1.4.0"
 
 [[CpuId]]
-deps = ["InteractiveUtils", "Markdown", "Pkg", "Test"]
+deps = ["Markdown", "Test"]
 git-tree-sha1 = "44529456cba0185724fc4bb995943416c5d94be3"
 uuid = "adafc99b-e345-5852-983c-f28acb93d879"
 version = "0.2.0"
@@ -52,17 +54,17 @@ uuid = "b552c78f-8df3-52c6-915a-8e097449b14b"
 version = "0.0.7"
 
 [[Distributed]]
-deps = ["LinearAlgebra", "Random", "Serialization", "Sockets"]
+deps = ["Random", "Serialization", "Sockets"]
 uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[ForwardDiff]]
-deps = ["CommonSubexpressions", "DiffResults", "DiffRules", "InteractiveUtils", "LinearAlgebra", "NaNMath", "Pkg", "Random", "SparseArrays", "SpecialFunctions", "StaticArrays", "Test"]
-git-tree-sha1 = "8425a7d4e060bc2ded32d090bce910a187d6cce7"
+deps = ["CommonSubexpressions", "DiffResults", "DiffRules", "InteractiveUtils", "LinearAlgebra", "NaNMath", "Random", "SparseArrays", "SpecialFunctions", "StaticArrays", "Test"]
+git-tree-sha1 = "b91250044374764e7c29af59a774c4b8d6100b6e"
 uuid = "f6369f11-7733-5829-9624-2563aa707210"
-version = "0.9.0"
+version = "0.10.1"
 
 [[InteractiveUtils]]
-deps = ["LinearAlgebra", "Markdown"]
+deps = ["Markdown"]
 uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 
 [[LibGit2]]
@@ -77,6 +79,12 @@ uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [[Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
+
+[[MacroTools]]
+deps = ["Compat"]
+git-tree-sha1 = "c443e1c8d58a4e9f61b708ad0a88286c7042145b"
+uuid = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
+version = "0.4.4"
 
 [[Markdown]]
 deps = ["Base64"]
@@ -110,13 +118,17 @@ uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 [[SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 
-[[SIMD]]
-deps = ["Compat", "InteractiveUtils", "Test"]
-git-tree-sha1 = "0b7362069a34d244a90f87d23072967b4b874a81"
-repo-rev = "master"
-repo-url = "https://github.com/eschnett/SIMD.jl.git"
-uuid = "fdea26ae-647d-5447-a871-4b548cad5224"
-version = "1.0.0+"
+[[SIMDPirates]]
+deps = ["MacroTools", "VectorizationBase"]
+path = "/home/chriselrod/.julia/dev/SIMDPirates"
+uuid = "21efa798-c60a-11e8-04d3-e1a92915a26a"
+version = "0.1.0"
+
+[[SLEEF]]
+deps = ["Printf", "Test"]
+git-tree-sha1 = "9d8bdbfad44aaab6886a7c4a3c84b6c49d752d47"
+uuid = "3e6341c9-01f6-5312-b33f-f8894a2e817a"
+version = "0.5.1"
 
 [[Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
@@ -133,16 +145,16 @@ deps = ["LinearAlgebra", "Random"]
 uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [[SpecialFunctions]]
-deps = ["BinDeps", "BinaryProvider", "Compat", "Libdl"]
-git-tree-sha1 = "d12f8917be3782f4b800ba16003b8d0d4858c2e5"
+deps = ["BinDeps", "BinaryProvider", "Libdl", "Test"]
+git-tree-sha1 = "0b45dc2e45ed77f445617b99ff2adf0f5b0f23ea"
 uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
-version = "0.7.0"
+version = "0.7.2"
 
 [[StaticArrays]]
 deps = ["InteractiveUtils", "LinearAlgebra", "Random", "Statistics", "Test"]
-git-tree-sha1 = "d432c79bef174a830304f8601427a4357dfdbfb7"
+git-tree-sha1 = "1eb114d6e23a817cd3e99abc3226190876d7c898"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "0.8.3"
+version = "0.10.2"
 
 [[Statistics]]
 deps = ["LinearAlgebra", "SparseArrays"]
@@ -159,20 +171,32 @@ uuid = "30578b45-9adc-5946-b283-645ec420af67"
 version = "0.4.0"
 
 [[UUIDs]]
-deps = ["Random"]
+deps = ["Random", "SHA"]
 uuid = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [[Unicode]]
 uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
 
 [[UnsafeArrays]]
-deps = ["Compat", "Pkg"]
+deps = ["Compat"]
 git-tree-sha1 = "fb8d569d402a60287ae631d0e65dc620346bca92"
 uuid = "c4a57d5a-5b31-53a6-b365-19f8c011fbd6"
 version = "0.2.0"
 
+[[VectorizationBase]]
+deps = ["CpuId", "LinearAlgebra"]
+path = "/home/chriselrod/.julia/dev/VectorizationBase"
+uuid = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
+version = "0.1.0"
+
+[[VectorizedRNG]]
+deps = ["Random", "SIMDPirates", "SLEEF", "VectorizationBase"]
+path = "/home/chriselrod/.julia/dev/VectorizedRNG"
+uuid = "33b4df10-0173-11e9-2a0c-851a7edac40e"
+version = "0.1.0"
+
 [[jBLAS]]
-deps = ["CpuId", "LinearAlgebra", "Random", "SIMD", "StaticArrays"]
+deps = ["CpuId", "LinearAlgebra", "Random", "SIMDPirates", "StaticArrays", "VectorizationBase"]
 path = "/home/chriselrod/.julia/dev/jBLAS"
 uuid = "814864de-88d5-11e8-1c72-cfea32f978d7"
 version = "0.1.0"

@@ -1,4 +1,129 @@
 
+function static_mul_quote(M,N,P,T,R1,R2)
+    outtup = Vector{Expr}(undef, M*P)
+    i = 0
+
+    L3 = R1 * P
+    W = VectorizationBase.pick_vector_width(R1, T)
+    m_rep = R1 ÷ W
+    for p ∈ 1:P, mr ∈ 1:m_rep, m ∈ 1:W
+        i += 1
+        outtup[i] = :(@inbounds $(Symbol(:C_, mr, :_, p))[$m].value )
+    end
+
+    num_reps = cld(L3 ÷ W + 3, VectorizationBase.REGISTER_COUNT)
+    A_col_1 = Expr(:tuple, [:(@inbounds Core.VecElement(A[$m])) for m ∈ 1:R1]...)
+    A_col_n = Expr(:tuple, [:(@inbounds Core.VecElement(A[$m + n*$R1])) for m ∈ 1:R1]...)
+    if num_reps == 1
+        return quote
+            $(Expr(:meta, :inline))
+            $([:(
+                $(Symbol(:Acol_,mr)) = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[ $(m + (mr-1)*W) ])) for m ∈ 1:W]...));
+                # Base.Cartesian.@nexprs $P p -> $(Symbol(:C_, mr, :_p)) = SIMDPirates.vmult($(Symbol(:Acol_,mr)), @inbounds B[1 + (p-1)*$R2])
+                $([ :($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vmult($(Symbol(:Acol_,mr)), @inbounds B[ $(1 + (p-1)*R2) ])) for p ∈ 1:P ]...)
+            ) for mr ∈ 1:m_rep]...)
+
+
+            @inbounds for n ∈ 1:$(N-1)
+                $([:(
+                    $(Symbol(:Acol_,mr)) = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[ $(m + (mr-1)*W) + n*$R1 ])) for m ∈ 1:W]...));
+                    # Base.Cartesian.@nexprs $P p -> $(Symbol(:C_, mr, :_p)) = SIMDPirates.vfma($(Symbol(:Acol_,mr)), (@inbounds B[n + 1 + (p-1)*$R2]), $(Symbol(:C_, mr, :_p)) )
+                    $([:($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vfma($(Symbol(:Acol_,mr)), (@inbounds B[n + $(1 + (p-1)*R2)]), $(Symbol(:C_, mr, :_, p)) )) for p ∈ 1:P]...)
+                ) for mr ∈ 1:m_rep]...)
+
+
+            end
+            StaticSIMDMatrix{$M,$P,$T,$R1,$L3}(
+                $(Expr(:tuple, outtup...))
+            )
+        end
+    end
+    piter = cld(P, num_reps)
+    q = quote
+        $(Expr(:meta, :inline))
+
+
+        $([:(
+            $(Symbol(:Acol_,mr)) = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[ $(m + (mr-1)*W) ])) for m ∈ 1:W]...));
+            # Base.Cartesian.@nexprs $piter p -> $(Symbol(:C_, mr, :_p)) = SIMDPirates.vmult($(Symbol(:Acol_,mr)), @inbounds B[1 + (p-1)*$R2])
+            $([ :($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vmult($(Symbol(:Acol_,mr)), @inbounds B[ $(1 + (p-1)*R2) ])) for p ∈ 1:piter ]...)
+        ) for mr ∈ 1:m_rep]...)
+        @inbounds for n ∈ 1:$(N-1)
+            # @nexprs $m_rep mr -> begin
+            #     Acol_mr = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[$m + (mr-1)*$W + n*$R1])) for m ∈ 1:R1]...))
+            #     Base.Cartesian.@nexprs $piter p -> C_mr_p = SIMDPirates.vfma(Acol_mr, (@inbounds B[n + 1 + (p-1)*$R2]), C_mr_p)
+            # end
+            $([:(
+                $(Symbol(:Acol_,mr)) = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[ $(m + (mr-1)*W) + n*$R1 ])) for m ∈ 1:W]...));
+                # Base.Cartesian.@nexprs $piter p -> $(Symbol(:C_, mr, :_p)) = SIMDPirates.vfma($(Symbol(:Acol_,mr)), (@inbounds B[n + 1 + (p-1)*$R2]), $(Symbol(:C_, mr, :_p)) )
+                $([:($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vfma($(Symbol(:Acol_,mr)), (@inbounds B[n + $(1 + (p-1)*R2)]), $(Symbol(:C_, mr, :_, p)) )) for p ∈ 1:piter]...)
+            ) for mr ∈ 1:m_rep]...)
+        end
+    end
+    plow = piter
+    for pmax ∈ 2:num_reps-1
+        push!(q.args, quote
+            # @nexprs $m_rep mr -> begin
+            #     Acol_mr = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[$m + (mr-1)*$W ])) for m ∈ 1:R1]...))
+            #     Base.Cartesian.@nexprs $piter p -> C_mr_{p+$plow} = SIMDPirates.vmult(Acol_mr, @inbounds B[1 + (p-1)*$R2])
+            # end
+            $([:(
+                $(Symbol(:Acol_,mr)) = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[ $(m + (mr-1)*W) ])) for m ∈ 1:W]...));
+                # Base.Cartesian.@nexprs $piter p -> $(Symbol(:C_, mr, :(_{p+$plow}))) = SIMDPirates.vmult($(Symbol(:Acol_,mr)), @inbounds B[1 + (p+$(plow-1))*$R2])
+                $([:($(Symbol(:C_, mr, :_, p+plow)) = SIMDPirates.vmult($(Symbol(:Acol_,mr)), @inbounds B[1 + $((p+(plow-1))*R2)])) for p ∈ 1:piter]...)
+            ) for mr ∈ 1:m_rep]...)
+            @inbounds for n ∈ 1:$(N-1)
+                $([:(
+                    $(Symbol(:Acol_,mr)) = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[ $(m + (mr-1)*W) + n*$R1 ])) for m ∈ 1:W]...));
+                    # Base.Cartesian.@nexprs $piter p -> $(Symbol(:C_, mr, :(_{p+$plow}))) = SIMDPirates.vfma($(Symbol(:Acol_,mr)), (@inbounds B[n + 1 + (p+$(plow-1))*$R2]), $(Symbol(:C_, mr, :(_{p+$plow}))))
+                    $([:($(Symbol(:C_, mr, :_, p+plow)) = SIMDPirates.vfma($(Symbol(:Acol_,mr)), (@inbounds B[n + $(1 + (p+(plow-1))*R2)]), $(Symbol(:C_, mr, :_, p+plow)))) for p ∈ 1:piter]...)
+                ) for mr ∈ 1:m_rep]...)
+                # @nexprs $m_rep mr -> begin
+                #     Acol_mr = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[$m + (mr-1)*$W + n*$R1])) for m ∈ 1:R1]...))
+                #     Base.Cartesian.@nexprs $piter p -> C_mr_{p+$plow} = SIMDPirates.vfma(Acol_mr, (@inbounds B[n + 1 + (p + $plow) * $R2 ]), C_mr_{p+$plow})
+                # end
+            end
+        end)
+        plow += piter
+    end
+    prem = P - plow
+    push!(q.args, quote
+        # @nexprs $m_rep mr -> begin
+        #     Acol_mr = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[$m + (mr-1)*$W ])) for m ∈ 1:R1]...))
+        #     Base.Cartesian.@nexprs $prem p -> C_mr_{p+$plow} = SIMDPirates.vmult(Acol_mr, @inbounds B[1 + (p-1)*$R2])
+        # end
+        $([:(
+            $(Symbol(:Acol_,mr)) = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[ $(m + (mr-1)*W) ])) for m ∈ 1:W]...));
+            # Base.Cartesian.@nexprs $prem p -> $(Symbol(:C_, mr, :(_{p+$plow}))) = SIMDPirates.vmult($(Symbol(:Acol_,mr)), @inbounds B[1 + (p+$(plow-1))*$R2])
+            $([:($(Symbol(:C_, mr, :_, p+plow)) = SIMDPirates.vmult($(Symbol(:Acol_,mr)), @inbounds B[ $(1 + (p+(plow-1))*R2) ])) for p ∈ 1:prem]...)
+        ) for mr ∈ 1:m_rep]...)
+        @inbounds for n ∈ 1:$(N-1)
+            $([:(
+                $(Symbol(:Acol_,mr)) = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[ $(m + (mr-1)*W) + n*$R1 ])) for m ∈ 1:W]...));
+                # Base.Cartesian.@nexprs $prem p -> $(Symbol(:C_, mr, :(_{p+$plow}))) = SIMDPirates.vfma($(Symbol(:Acol_,mr)), (@inbounds B[n + 1 + (p+$(plow-1))*$R2]), $(Symbol(:C_, mr, :(_{p+$plow}))))
+                $([:($(Symbol(:C_, mr, :_, p+plow)) = SIMDPirates.vfma($(Symbol(:Acol_,mr)), (@inbounds B[n +  $(1 + (p+(plow-1))*R2) ]), $(Symbol(:C_, mr, :_, p+plow)))) for p ∈ 1:prem]...)
+            ) for mr ∈ 1:m_rep]...)
+            # @nexprs $m_rep mr -> begin
+            #     Acol_mr = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[$m + (mr-1)*$W + n*$R1])) for m ∈ 1:R1]...))
+            #     Base.Cartesian.@nexprs $prem p -> C_mr_{p+$plow} = SIMDPirates.vfma(Acol_mr, (@inbounds B[n + 1 + (p + $(plow-1)) * $R2 ]), C_mr_{p+$plow})
+            # end
+        end
+    end)
+    push!(q.args,  :(StaticSIMDMatrix{$M,$P,$T,$R1,$L3}( $(Expr(:tuple, outtup...)) )))
+    q
+end
+
+@generated function Base.:*(A::StaticSIMDMatrix{M,N,T,R1,L1}, B::StaticSIMDMatrix{N,P,T,R2,L2}) where {M,N,P,T,R1,R2,L1,L2}
+    static_mul_quote(M,N,P,T,R1,R2)
+end
+# @generated function Base.:*(A::LinearAlgebra.Adjoint{T,StaticSIMDVector{N,T,R1,L1}}, B::StaticSIMDMatrix{N,P,T,R2}) where {N,P,T,R1,R2,L1}
+#     static_mul_quote(1,N,P,T,R1,R2)
+# end
+@generated function Base.:*(A::StaticSIMDMatrix{M,N,T,R1}, B::StaticSIMDVector{N,T,R2}) where {M,N,T,R1,R2}
+    static_mul_quote(M,N,1,T,R1,R2)
+end
+
+
 @inline function LinearAlgebra.mul!(C, A, B::SIMDArray)
     Bdata = B.data
     @uviews Bdata mul!(C, A, @view(B.data[1:B.nrow,:]))
@@ -117,18 +242,18 @@ function unrolled_kernel_quote(M,N,Pₖ,stride_AD,stride_X,T)
     quote
         pD, pA, pX = pointer(D), pointer(A), pointer(X)
         Base.Cartesian.@nexprs $Pₖ p -> begin
-            vX = $V(unsafe_load(pX + (p-1)*$X_stride))
+            vX = vbroadcast($V, unsafe_load(pX + (p-1)*$X_stride))
             Base.Cartesian.@nexprs $Q q -> begin
                 vA_q = vload($V, pA + $REGISTER_SIZE*(q-1))
-                Dx_p_q = vA_q * vX
+                Dx_p_q = vmult(vA_q, vX)
             end
         end
         Base.Cartesian.@nexprs $(N-1) n -> begin
             Base.Cartesian.@nexprs $Pₖ p -> begin
-                vX = $V(unsafe_load(pX + n*$T_size + (p-1)*$X_stride))
+                vX = vbroadcast($V, unsafe_load(pX + n*$T_size + (p-1)*$X_stride))
                 Base.Cartesian.@nexprs $Q q -> begin
                     vA_q = vload($V, pA + n*$AD_stride + $REGISTER_SIZE*(q-1))
-                    Dx_p_q = fma(vA_q, vX, Dx_p_q)
+                    Dx_p_q = vfma(vA_q, vX, Dx_p_q)
                 end
             end
         end

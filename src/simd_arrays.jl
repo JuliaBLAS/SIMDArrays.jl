@@ -76,22 +76,27 @@ mutable struct SizedSIMDArray{S<:Tuple,T,N,R,L} <: AbstractSizedSIMDArray{S,T,N,
     end
 end
 
-@generated function SizedSIMDArray(::UndefInitializer, ::Val{S}, ::Type{T}=Float64) where {S,T}
+@generated function SizedSIMDArray(::UndefInitializer, ::Val{S}, ::Type{T1}=Float64) where {S,T1}
     N = length(S)
     R, L = calculate_L_from_size(S)
     # SD = Expr(:curly, :Tuple, S...)
     SD = Tuple{S...}
     quote
-        out = SizedSIMDArray{$SD,$T,$N,$R,$L}(undef)
+        out = SizedSIMDArray{$SD,$T1,$N,$R,$L}(undef)
         Base.Cartesian.@nloops $(N-1) i n -> 1:$S[n+1] begin
             @inbounds for i_0 = $(S[1]+1:R)
-                ( Base.Cartesian.@nref $N out n -> i_{n-1} ) = $(zero(T))
+                $(Expr(:ref, :out, [Symbol(:i_, n) for n ∈ 0:N-1]...)) = $(zero(T1))
+                # ( Base.Cartesian.@nref $N out n -> i_{n-1} ) = $(zero(T1))# zero($T1)
             end
         end
         out
     end
     # :(SizedSIMDArray{$SD,$T,$N,$R,$L}(undef))
 end
+
+# function zero_hidden!(A::SizedSIMDArray{SD}) where SD
+#
+# end
 
 # Not type stable!
 function SizedSIMDArray(A::AbstractArray{T,N}) where {T,N}
@@ -104,23 +109,45 @@ end
 @inline full_length(x) = length(x)
 const SizedSIMDVector{N,T,R,L} = SizedSIMDArray{Tuple{N},T,1,R,L} # R and L will always be the same...
 const SizedSIMDMatrix{M,N,T,R,L} = SizedSIMDArray{Tuple{M,N},T,2,R,L}
-struct StaticSIMDArray{S<:Tuple,T,N,R,L} <: AbstractSIMDArray{T,N}
+struct StaticSIMDArray{S<:Tuple,T,N,R,L} <: AbstractSizedSIMDArray{S,T,N,R,L}
     data::NTuple{L,T}
-    function StaticSIMDArray{S,T,N,R,L}(::UndefInitializer) where {S,T,N,R,L}
-        #check_array_parameters(S, T, Val{N}, Val{L})
-        new()
-    end
-    @generated function StaticSIMDArray{S,T}(::UndefInitializer) where {S,T}
-        #check_array_parameters(S, T, Val{N}, Val{L})
-        N = length(S)
+end
+@generated function StaticSIMDArray{S}(data::NTuple{L1,T}) where {S,T,L1}
+    #check_array_parameters(S, T, Val{N}, Val{L})
+    N = length(S)
 
-        R, L = calculate_L_from_size(S)
-        # @show S, T, N, L
-        :(StaticSIMDArray{$S,$T,$N,$R,$L}(undef))
+    R, L = calculate_L_from_size(S)
+    # @show S, T, N, L
+    L1 == L && return :(StaticSIMDArray{$S,$T,$N,$R,$L}(data))
+    ind = 0
+    LdR = L ÷ R
+    data_expr = Expr(:tuple,)
+    for j ∈ 1:LdR
+        for i ∈ 1:S[1]
+            ind += 1
+            push!(data_expr.args, :(data[$ind]))
+        end
+        for i ∈ S[1]+1:R
+            push!(data_expr.args, zero(T))
+        end
     end
+    :(StaticSIMDArray{$S,$T,$N,$R,$L}($data_expr))
 end
 const StaticSIMDVector{N,T,R,L} = StaticSIMDArray{Tuple{N},T,1,R,L}
 const StaticSIMDMatrix{M,N,T,R,L} = StaticSIMDArray{Tuple{M,N},T,2,R,L}
+
+@generated function StaticArrays.SVector(v::SizedSIMDVector{P,T}) where {P,T}
+    :(StaticArrays.SVector($(Expr(:tuple, [:(@inbounds v[$p]) for p ∈ 1:P]...))))
+end
+@inline function StaticSIMDVector(v::SizedSIMDVector{N,T,R,L}) where {N,T,R,L}
+    StaticSIMDArray{Tuple{N},T,1,R,L}(v.data)
+end
+@inline function StaticSIMDMatrix(A::SizedSIMDArray{Tuple{M,N},T,2,R,L}) where {M,N,T,R,L}
+    StaticSIMDArray{Tuple{M,N},T,2,R,L}(A.data)
+end
+@inline function StaticSIMDArray(A::SizedSIMDArray{S,T,N,R,L}) where {S<:Tuple,T,N,R,L}
+    StaticSIMDArray{S,T,N,R,L}(A.data)
+end
 
 @inline Base.pointer(A::SIMDArray) = pointer(A.data)
 @inline Base.pointer(A::SizedSIMDArray{S,T}) where {S,T} = Base.unsafe_convert(Ptr{T}, pointer_from_objref(A))
@@ -154,16 +181,26 @@ to_tuple(S) = tuple(S.parameters...)
 # Do we want this, or L?
 @generated Base.length(::AbstractSizedSIMDArray{S}) where S = prod(to_tuple(S))
 
+@noinline throwboundserror() = throw(BoundsError())
+
 @inline Base.getindex(A::SIMDArray, i...) = A.data[i...]
 @inline Base.setindex!(A::SIMDArray, v, i...) = A.data[i...] = v
 @inline function Base.getindex(A::SizedSIMDArray{S,T,1,L,L}, i::Int) where {S,T,L}
-    @boundscheck i <= L || throw(BoundsError())
+    @boundscheck i <= L || throwboundserror()
     unsafe_load(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), i)
 end
 @inline function Base.getindex(A::SizedSIMDArray, i::Int)
-    @boundscheck i <= full_length(A) || throw(BoundsError())
+    @boundscheck i <= full_length(A) || throwboundserror()
     T = eltype(A)
     unsafe_load(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), i)
+end
+@inline function Base.getindex(A::StaticSIMDArray{S,T,1,L,L}, i::Int) where {S,T,L}
+    @boundscheck i <= L || throwboundserror()
+    @inbounds A.data[i]
+end
+@inline function Base.getindex(A::StaticSIMDArray, i::Int)
+    @boundscheck i <= full_length(A) || throwboundserror()
+    @inbounds A.data[i]
 end
 """
 Returns zero based index. Don't forget to add one when using with arrays instead of pointers.
@@ -188,10 +225,10 @@ end
         @boundscheck begin
             Base.Cartesian.@nif $(N+1) d->(d == 1 ? i[d] > $R : i[d] > $sv[d]) d->throw(BoundsError()) d -> nothing
         end
-        T = eltype(A)
+        # T = eltype(A)
         # unsafe_load(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A) + $(sizeof(T))*($ex) ))
         # A.data[$ex+1]
-        unsafe_load(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), $ex)
+        unsafe_load(Base.unsafe_convert(Ptr{$T}, pointer_from_objref(A)), $ex)
     end
 end
 @generated function Base.getindex(A::SizedSIMDArray{S,T,N,R,L}, i::CartesianIndex{N}) where {S,T,N,R,L}
@@ -203,7 +240,30 @@ end
         @boundscheck begin
             Base.Cartesian.@nif $(N+1) d->(d == 1 ? i[d] > $R : i[d] > $dims[d]) d->throw(BoundsError()) d -> nothing
         end
-        unsafe_load(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), $ex)
+        unsafe_load(Base.unsafe_convert(Ptr{$T}, pointer_from_objref(A)), $ex)
+    end
+end
+@generated function Base.getindex(A::StaticSIMDArray{S,T,N,R,L}, i::Vararg{Int,N}) where {S,T,N,R,L}
+    # dims = ntuple(j -> S.parameters[j], Val(N))
+    sv = S.parameters
+    ex = sub2ind_expr(sv, R)
+    quote
+        $(Expr(:meta, :inline))
+        @boundscheck begin
+            Base.Cartesian.@nif $(N+1) d->(d == 1 ? i[d] > $R : i[d] > $sv[d]) d->throw(BoundsError()) d -> nothing
+        end
+        @inbounds A.data[$ex]
+    end
+end
+@generated function Base.getindex(A::StaticSIMDArray{S,T,N,R,L}, i::CartesianIndex{N}) where {S,T,N,R,L}
+    dims = ntuple(j -> S.parameters[j], Val(N))
+    ex = sub2ind_expr(dims, R)
+    quote
+        $(Expr(:meta, :inline))
+        @boundscheck begin
+            Base.Cartesian.@nif $(N+1) d->(d == 1 ? i[d] > $R : i[d] > $dims[d]) d->throw(BoundsError()) d -> nothing
+        end
+        @inbounds A.data[$ex]
     end
 end
 @inline function Base.setindex!(A::SizedSIMDArray, v, i::Int)
@@ -228,8 +288,8 @@ end
         @boundscheck begin
             Base.Cartesian.@nif $(N+1) d->( d == 1 ? i[d] > $R : i[d] > $dims[d]) d->throw(BoundsError("Dimension $d out of bounds")) d -> nothing
         end
-        T = eltype(A)
-        unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), $ex)
+        # T = eltype(A)
+        unsafe_store!(Base.unsafe_convert(Ptr{$T}, pointer_from_objref(A)), convert($T,v), $ex)
         v
     end
 end
@@ -241,8 +301,8 @@ end
         @boundscheck begin
             Base.Cartesian.@nif $(N+1) d->( d == 1 ? i[d] > $R : i[d] > $dims[d]) d->throw(BoundsError("Dimension $d out of bounds $(i[d]) > $R")) d -> nothing
         end
-        T = eltype(A)
-        unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), $ex)
+        # T = eltype(A)
+        unsafe_store!(Base.unsafe_convert(Ptr{$T}, pointer_from_objref(A)), convert($T,v), $ex)
         v
     end
 end
@@ -283,7 +343,7 @@ setfirstindex(tup::NTuple{N,T}, val::T) where {N,T}  = ntuple(j -> j == 1 ? val 
 
 # defauling to IndexCartesian() at the moment
 # I want @eachindex when we only have two SIMDArrays to bring us to all elements.
-Base.IndexStyle(::Type{<:AbstractSIMDArray}, ::Type{<:AbstractSIMDArray}) = IndexLinear()
+# Base.IndexStyle(::Type{<:AbstractSIMDArray}, ::Type{<:AbstractSIMDArray}) = IndexLinear()
 # Base.IndexStyle(::AbstractSIMDArray, ::AbstractArray) = IndexCartesian()
 # Base.IndexStyle(::AbstractArray, ::AbstractSIMDArray) = IndexCartesian()
 # Base.IndexStyle(::AbstractSIMDArray, ::AbstractArray, ::AbstractArray) = IndexCartesian()

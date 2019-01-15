@@ -1,13 +1,16 @@
 module SIMDArrays
 
-using jBLAS, LinearAlgebra, SIMD, Random, Base.Cartesian
+using jBLAS, LinearAlgebra, Random, Base.Cartesian, VectorizedRNG, SIMDPirates, VectorizationBase
 using UnsafeArrays
 using ForwardDiff
 # Base.mightalias(A::UnsafeArray, B::UnsafeArray) = false
 
+import StaticArrays
 import  jBLAS: REGISTER_SIZE, CACHELINE_SIZE,
         Kernel, initkernel!, kernel!,
         PrefetchA, PrefetchX, PrefetchAX
+
+using SIMDPirates: Vec, vmult, vadd, vsub, vbroadcast, vload, vstore, vfma
 # or whatever unsafe views are called
 # needed for operations so we can ignore excess elemenents when necessary.
 
@@ -27,7 +30,8 @@ export  SizedSIMDVector,
         invchol!,
         invcholdet!,
         safeinvcholdet!,
-        safeinvchol!
+        safeinvchol!,
+        @Static, @Sized
         # vsub!,
         # vadd!,
         # reflect!
