@@ -32,7 +32,7 @@ end
             end
         end
     else
-        q = quote end
+        q = quote ptr_A = pointer(A) end
     end
     if r > 0
         push!(q.args, :(u = rand(VectorizedRNG.GLOBAL_vPCG, Vec{$r,$T}) ))
@@ -45,9 +45,9 @@ end
     q
 end
 @generated function Random.rand(::Type{<:StaticSIMDArray{S,T}}) where {S,T<:Union{Float32,Float64}}
-    N = length(S)
+    N = length(S.parameters)
 
-    R, L = calculate_L_from_size(S)
+    R, L = calculate_L_from_size(S.parameters)
 
     size_T = sizeof(T)
     W = VectorizationBase.pick_vector_width(L, T)
@@ -73,7 +73,7 @@ end
             push!(out_exprs.args, :( @inbounds u[$j].value ) )
         end
     end
-    push!(u_exprs, :(StaticSIMDArray{$S,$T,$N,$R,$L}($out_exprs)))
+    push!(u_exprs.args, :(StaticSIMDArray{$S,$T,$N,$R,$L}($out_exprs)))
     u_exprs
 end
 
@@ -112,7 +112,7 @@ end
             end
         end
     else
-        q = quote end
+        q = quote ptr_A = pointer(A) end
     end
     if r > 0
         push!(q.args, :(u = randn(VectorizedRNG.GLOBAL_vPCG, Vec{$r,$T}) ))

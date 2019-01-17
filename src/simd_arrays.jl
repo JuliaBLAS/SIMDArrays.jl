@@ -266,15 +266,27 @@ end
         @inbounds A.data[$ex]
     end
 end
-@inline function Base.setindex!(A::SizedSIMDArray, v, i::Int)
+@inline function Base.setindex!(A::SizedSIMDArray{S,T,N,R,L}, v, i::Int) where {S,T,N,R,L}
     @boundscheck i <= full_length(A) || throw(BoundsError())
-    T = eltype(A)
+    # T = eltype(A)
     unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), i)
     v
 end
-@inline function Base.setindex!(A::SizedSIMDVector, v, i::Int)
+@inline function Base.setindex!(A::SizedSIMDArray{S,T,N,R,L}, v::T, i::Int) where {S,T,N,R,L}
     @boundscheck i <= full_length(A) || throw(BoundsError())
-    T = eltype(A)
+    # T = eltype(A)
+    unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), v, i)
+    v
+end
+@inline function Base.setindex!(A::SizedSIMDArray{S,T,1,R,R}, v, i::Int) where {S,T,N,R}
+    @boundscheck i <= full_length(A) || throw(BoundsError())
+    # T = eltype(A)
+    unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), i)
+    v
+end
+@inline function Base.setindex!(A::SizedSIMDArray{S,T,1,R,R}, v::T, i::Int) where {S,T,N,R}
+    @boundscheck i <= full_length(A) || throw(BoundsError())
+    # T = eltype(A)
     unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), i)
     v
 end
