@@ -1,11 +1,11 @@
 
 function static_mul_quote(M,N,P,T,R1,R2)
-    outtup = Vector{Expr}(undef, M*P)
     i = 0
 
     L3 = R1 * P
     W = VectorizationBase.pick_vector_width(R1, T)
     m_rep = R1 ÷ W
+    outtup = Vector{Expr}(undef, R1*P)
     for p ∈ 1:P, mr ∈ 1:m_rep, m ∈ 1:W
         i += 1
         outtup[i] = :(@inbounds $(Symbol(:C_, mr, :_, p))[$m].value )
@@ -19,8 +19,8 @@ function static_mul_quote(M,N,P,T,R1,R2)
             $(Expr(:meta, :inline))
             $([:(
                 $(Symbol(:Acol_,mr)) = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[ $(m + (mr-1)*W) ])) for m ∈ 1:W]...));
-                # Base.Cartesian.@nexprs $P p -> $(Symbol(:C_, mr, :_p)) = SIMDPirates.vmult($(Symbol(:Acol_,mr)), @inbounds B[1 + (p-1)*$R2])
-                $([ :($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vmult($(Symbol(:Acol_,mr)), @inbounds B[ $(1 + (p-1)*R2) ])) for p ∈ 1:P ]...)
+                # Base.Cartesian.@nexprs $P p -> $(Symbol(:C_, mr, :_p)) = SIMDPirates.evmul($(Symbol(:Acol_,mr)), @inbounds B[1 + (p-1)*$R2])
+                $([ :($(Symbol(:C_, mr, :_, p)) = SIMDPirates.evmul($(Symbol(:Acol_,mr)), @inbounds B[ $(1 + (p-1)*R2) ])) for p ∈ 1:P ]...)
             ) for mr ∈ 1:m_rep]...)
 
 
@@ -45,8 +45,8 @@ function static_mul_quote(M,N,P,T,R1,R2)
 
         $([:(
             $(Symbol(:Acol_,mr)) = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[ $(m + (mr-1)*W) ])) for m ∈ 1:W]...));
-            # Base.Cartesian.@nexprs $piter p -> $(Symbol(:C_, mr, :_p)) = SIMDPirates.vmult($(Symbol(:Acol_,mr)), @inbounds B[1 + (p-1)*$R2])
-            $([ :($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vmult($(Symbol(:Acol_,mr)), @inbounds B[ $(1 + (p-1)*R2) ])) for p ∈ 1:piter ]...)
+            # Base.Cartesian.@nexprs $piter p -> $(Symbol(:C_, mr, :_p)) = SIMDPirates.evmul($(Symbol(:Acol_,mr)), @inbounds B[1 + (p-1)*$R2])
+            $([ :($(Symbol(:C_, mr, :_, p)) = SIMDPirates.evmul($(Symbol(:Acol_,mr)), @inbounds B[ $(1 + (p-1)*R2) ])) for p ∈ 1:piter ]...)
         ) for mr ∈ 1:m_rep]...)
         @inbounds for n ∈ 1:$(N-1)
             # @nexprs $m_rep mr -> begin
@@ -65,12 +65,12 @@ function static_mul_quote(M,N,P,T,R1,R2)
         push!(q.args, quote
             # @nexprs $m_rep mr -> begin
             #     Acol_mr = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[$m + (mr-1)*$W ])) for m ∈ 1:R1]...))
-            #     Base.Cartesian.@nexprs $piter p -> C_mr_{p+$plow} = SIMDPirates.vmult(Acol_mr, @inbounds B[1 + (p-1)*$R2])
+            #     Base.Cartesian.@nexprs $piter p -> C_mr_{p+$plow} = SIMDPirates.evmul(Acol_mr, @inbounds B[1 + (p-1)*$R2])
             # end
             $([:(
                 $(Symbol(:Acol_,mr)) = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[ $(m + (mr-1)*W) ])) for m ∈ 1:W]...));
-                # Base.Cartesian.@nexprs $piter p -> $(Symbol(:C_, mr, :(_{p+$plow}))) = SIMDPirates.vmult($(Symbol(:Acol_,mr)), @inbounds B[1 + (p+$(plow-1))*$R2])
-                $([:($(Symbol(:C_, mr, :_, p+plow)) = SIMDPirates.vmult($(Symbol(:Acol_,mr)), @inbounds B[1 + $((p+(plow-1))*R2)])) for p ∈ 1:piter]...)
+                # Base.Cartesian.@nexprs $piter p -> $(Symbol(:C_, mr, :(_{p+$plow}))) = SIMDPirates.evmul($(Symbol(:Acol_,mr)), @inbounds B[1 + (p+$(plow-1))*$R2])
+                $([:($(Symbol(:C_, mr, :_, p+plow)) = SIMDPirates.evmul($(Symbol(:Acol_,mr)), @inbounds B[1 + $((p+(plow-1))*R2)])) for p ∈ 1:piter]...)
             ) for mr ∈ 1:m_rep]...)
             @inbounds for n ∈ 1:$(N-1)
                 $([:(
@@ -90,12 +90,12 @@ function static_mul_quote(M,N,P,T,R1,R2)
     push!(q.args, quote
         # @nexprs $m_rep mr -> begin
         #     Acol_mr = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[$m + (mr-1)*$W ])) for m ∈ 1:R1]...))
-        #     Base.Cartesian.@nexprs $prem p -> C_mr_{p+$plow} = SIMDPirates.vmult(Acol_mr, @inbounds B[1 + (p-1)*$R2])
+        #     Base.Cartesian.@nexprs $prem p -> C_mr_{p+$plow} = SIMDPirates.evmul(Acol_mr, @inbounds B[1 + (p-1)*$R2])
         # end
         $([:(
             $(Symbol(:Acol_,mr)) = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[ $(m + (mr-1)*W) ])) for m ∈ 1:W]...));
-            # Base.Cartesian.@nexprs $prem p -> $(Symbol(:C_, mr, :(_{p+$plow}))) = SIMDPirates.vmult($(Symbol(:Acol_,mr)), @inbounds B[1 + (p+$(plow-1))*$R2])
-            $([:($(Symbol(:C_, mr, :_, p+plow)) = SIMDPirates.vmult($(Symbol(:Acol_,mr)), @inbounds B[ $(1 + (p+(plow-1))*R2) ])) for p ∈ 1:prem]...)
+            # Base.Cartesian.@nexprs $prem p -> $(Symbol(:C_, mr, :(_{p+$plow}))) = SIMDPirates.evmul($(Symbol(:Acol_,mr)), @inbounds B[1 + (p+$(plow-1))*$R2])
+            $([:($(Symbol(:C_, mr, :_, p+plow)) = SIMDPirates.evmul($(Symbol(:Acol_,mr)), @inbounds B[ $(1 + (p+(plow-1))*R2) ])) for p ∈ 1:prem]...)
         ) for mr ∈ 1:m_rep]...)
         @inbounds for n ∈ 1:$(N-1)
             $([:(
@@ -113,7 +113,7 @@ function static_mul_quote(M,N,P,T,R1,R2)
     q
 end
 
-@generated function Base.:*(A::StaticSIMDMatrix{M,N,T,R1,L1}, B::StaticSIMDMatrix{N,P,T,R2,L2}) where {M,N,P,T,R1,R2,L1,L2}
+@generated function Base.:*(A::StaticSIMDMatrix{M,N,T,R1,L1}, B::StaticSIMDMatrix{N,P,T,R2,L2}) where {M,N,P,T,R1,R2,L2,L1}
     static_mul_quote(M,N,P,T,R1,R2)
 end
 # @generated function Base.:*(A::LinearAlgebra.Adjoint{T,StaticSIMDVector{N,T,R1,L1}}, B::StaticSIMDMatrix{N,P,T,R2}) where {N,P,T,R1,R2,L1}
@@ -245,7 +245,7 @@ function unrolled_kernel_quote(M,N,Pₖ,stride_AD,stride_X,T)
             vX = vbroadcast($V, unsafe_load(pX + (p-1)*$X_stride))
             Base.Cartesian.@nexprs $Q q -> begin
                 vA_q = vload($V, pA + $REGISTER_SIZE*(q-1))
-                Dx_p_q = vmult(vA_q, vX)
+                Dx_p_q = evmul(vA_q, vX)
             end
         end
         Base.Cartesian.@nexprs $(N-1) n -> begin

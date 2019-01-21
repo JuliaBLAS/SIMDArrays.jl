@@ -10,7 +10,7 @@ import  jBLAS: REGISTER_SIZE, CACHELINE_SIZE,
         Kernel, initkernel!, kernel!,
         PrefetchA, PrefetchX, PrefetchAX
 
-using SIMDPirates: Vec, vmult, vadd, vsub, vbroadcast, vload, vstore, vfma
+using SIMDPirates: Vec, evmul, vadd, vsub, vbroadcast, vload, vstore, vfma
 # or whatever unsafe views are called
 # needed for operations so we can ignore excess elemenents when necessary.
 
