@@ -207,7 +207,7 @@ Returns zero based index. Don't forget to add one when using with arrays instead
 """
 function sub2ind_expr(S, R)
     N = length(S)
-    N == 1 && return :(i[1] - 1)
+    N == 1 && return :(i[1])
     ex = :(i[$N] - 1)
     for i ∈ (N - 1):-1:2
         ex = :(i[$i] - 1 + $(S[i]) * $ex)
@@ -266,30 +266,30 @@ end
         @inbounds A.data[$ex]
     end
 end
-@inline function Base.setindex!(A::SizedSIMDArray{S,T,N,R,L}, v, i::Int) where {S,T,N,R,L}
-    @boundscheck i <= full_length(A) || throw(BoundsError())
-    # T = eltype(A)
-    unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), i)
-    v
-end
-@inline function Base.setindex!(A::SizedSIMDArray{S,T,N,R,L}, v::T, i::Int) where {S,T,N,R,L}
-    @boundscheck i <= full_length(A) || throw(BoundsError())
-    # T = eltype(A)
-    unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), v, i)
-    v
-end
-@inline function Base.setindex!(A::SizedSIMDArray{S,T,1,R,R}, v, i::Int) where {S,T,N,R}
-    @boundscheck i <= full_length(A) || throw(BoundsError())
-    # T = eltype(A)
-    unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), i)
-    v
-end
-@inline function Base.setindex!(A::SizedSIMDArray{S,T,1,R,R}, v::T, i::Int) where {S,T,N,R}
-    @boundscheck i <= full_length(A) || throw(BoundsError())
-    # T = eltype(A)
-    unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), i)
-    v
-end
+# @inline function Base.setindex!(A::SizedSIMDArray{S,T,N,R,L}, v, i::Int) where {S,T,N,R,L}
+#     @boundscheck i <= full_length(A) || throw(BoundsError())
+#     # T = eltype(A)
+#     unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), i)
+#     v
+# end
+# @inline function Base.setindex!(A::SizedSIMDArray{S,T,N,R,L}, v::T, i::Int) where {S,T,N,R,L}
+#     @boundscheck i <= full_length(A) || throw(BoundsError())
+#     # T = eltype(A)
+#     unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), v, i)
+#     v
+# end
+# @inline function Base.setindex!(A::SizedSIMDArray{S,T,1,R,R}, v, i::Int) where {S,T,N,R}
+#     @boundscheck i <= full_length(A) || throw(BoundsError())
+#     # T = eltype(A)
+#     unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), i)
+#     v
+# end
+# @inline function Base.setindex!(A::SizedSIMDArray{S,T,1,R,R}, v::T, i::Int) where {S,T,N,R}
+#     @boundscheck i <= full_length(A) || throw(BoundsError())
+#     # T = eltype(A)
+#     unsafe_store!(Base.unsafe_convert(Ptr{T}, pointer_from_objref(A)), convert(T,v), i)
+#     v
+# end
 
 
 @generated function Base.setindex!(A::SizedSIMDArray{S,T,N,R,L}, v, i::CartesianIndex{N}) where {S,T,N,R,L}
@@ -305,9 +305,13 @@ end
         v
     end
 end
-@generated function Base.setindex!(A::SizedSIMDArray{S,T,N,R,L}, v, i::Vararg{Integer,N}) where {S,T,N,R,L}
+@generated function Base.setindex!(A::SizedSIMDArray{S,T,N,R,L}, v, i::Vararg{Integer,M}) where {S,T,N,R,L,M}
     dims = ntuple(j -> S.parameters[j], Val(N))
-    ex = sub2ind_expr(dims, R)
+    if M == 1
+        ex = :(@inbounds i[1])
+    else
+        ex = sub2ind_expr(dims, R)
+    end
     quote
         $(Expr(:meta, :inline))
         @boundscheck begin
