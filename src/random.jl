@@ -41,9 +41,11 @@ end
         for n ∈ 0:rrep - 1
             push!(q.args, :(vstore($(VectorizedRNG.subset_vec(u_sym, W, n*W)), ptr_A, $(L - r + 1 + n*W))))
         end
-        u_sym = gensym(:u_rem)
-        push!(u_exprs.args, :($u_sym = rand(VectorizedRNG.GLOBAL_vPCG, Vec{$rrem,$T}) ))
-        push!(q.args, :(vstore($u_sym, ptr_A, $(L - rrem + 1))))
+        if rrem > 0
+            u_sym = gensym(:u_rem)
+            push!(u_exprs.args, :($u_sym = rand(VectorizedRNG.GLOBAL_vPCG, Vec{$rrem,$T}) ))
+            push!(q.args, :(vstore($u_sym, ptr_A, $(L - rrem + 1))))
+        end
     end
     push!(q.args, :A)
     q
@@ -77,10 +79,12 @@ end
         for j ∈ 1:W*rrep
             push!(out_exprs.args, :( @inbounds $u_sym[$j].value ) )
         end
-        u_sym = gensym(:u_rem)
-        push!(u_exprs.args, :($u_sym = rand(VectorizedRNG.GLOBAL_vPCG, Vec{$rrem,$T}) ))
-        for j ∈ 1:rrem
-            push!(out_exprs.args, :( @inbounds $u_sym[$j].value ) )
+        if rrem > 0
+            u_sym = gensym(:u_rem)
+            push!(u_exprs.args, :($u_sym = rand(VectorizedRNG.GLOBAL_vPCG, Vec{$rrem,$T}) ))
+            for j ∈ 1:rrem
+                push!(out_exprs.args, :( @inbounds $u_sym[$j].value ) )
+            end
         end
     end
     push!(u_exprs.args, :(StaticSIMDArray{$S,$T,$N,$R,$L}($out_exprs)))
@@ -131,16 +135,19 @@ end
         for n ∈ 0:rrep - 1
             push!(q.args, :(vstore($(VectorizedRNG.subset_vec(u_sym, W, n*W)), ptr_A, $(L - r + 1 + n*W))))
         end
-        u_sym = gensym(:u_rem)
-        push!(u_exprs.args, :($u_sym = randn(VectorizedRNG.GLOBAL_vPCG, Vec{$rrem,$T}) ))
-        push!(q.args, :(vstore($u_sym, ptr_A, $(L - rrem + 1))))
+        if rrem > 0
+            u_sym = gensym(:u_rem)
+            push!(u_exprs.args, :($u_sym = randn(VectorizedRNG.GLOBAL_vPCG, Vec{$rrem,$T}) ))
+            push!(q.args, :(vstore($u_sym, ptr_A, $(L - rrem + 1))))
+        end
     end
     push!(q.args, :A)
     q
 end
 
 
-@generated function Random.randn(::Type{<:StaticSIMDArray{S,T}}) where {S,T<:Union{Float32,Float64}}
+# @generated
+function Random.randn(::Type{<:StaticSIMDArray{S,T}}) where {S,T<:Union{Float32,Float64}}
     N = length(S.parameters)
 
     R, L = calculate_L_from_size(S.parameters)
@@ -169,10 +176,12 @@ end
         for j ∈ 1:W*rrep
             push!(out_exprs.args, :( @inbounds $u_sym[$j].value ) )
         end
-        u_sym = gensym(:u_rem)
-        push!(u_exprs.args, :($u_sym = randn(VectorizedRNG.GLOBAL_vPCG, Vec{$rrem,$T}) ))
-        for j ∈ 1:rrem
-            push!(out_exprs.args, :( @inbounds $u_sym[$j].value ) )
+        if rrem > 0
+            u_sym = gensym(:u_rem)
+            push!(u_exprs.args, :($u_sym = randn(VectorizedRNG.GLOBAL_vPCG, Vec{$rrem,$T}) ))
+            for j ∈ 1:rrem
+                push!(out_exprs.args, :( @inbounds $u_sym[$j].value ) )
+            end
         end
     end
     push!(u_exprs.args, :(StaticSIMDArray{$S,$T,$N,$R,$L}($out_exprs)))
