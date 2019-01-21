@@ -35,11 +35,15 @@ end
         q = quote ptr_A = pointer(A) end
     end
     if r > 0
-        push!(q.args, :(u = rand(VectorizedRNG.GLOBAL_vPCG, Vec{$r,$T}) ))
-        rdw = r ÷ W
-        for n ∈ 0:rdw - 1
-            push!(q.args, :(vstore($(VectorizedRNG.subset_vec(:u, W, n*W)), ptr_A, $(L - r + 1 + n*W))))
+        rrep, rrem = divrem(r, W)
+        u_sym = gensym(Symbol(:u_remw))
+        push!(q.args, :($u_sym = rand(VectorizedRNG.GLOBAL_vPCG, Vec{$(W*rrep),$T}) ))
+        for n ∈ 0:rrep - 1
+            push!(q.args, :(vstore($(VectorizedRNG.subset_vec(u_sym, W, n*W)), ptr_A, $(L - r + 1 + n*W))))
         end
+        u_sym = gensym(:u_rem)
+        push!(u_exprs.args, :($u_sym = rand(VectorizedRNG.GLOBAL_vPCG, Vec{$rrem,$T}) ))
+        push!(q.args, :(vstore($u_sym, ptr_A, $(L - rrem + 1))))
     end
     push!(q.args, :A)
     q
@@ -67,10 +71,16 @@ end
         end
     end
     if r > 0
-        push!(u_exprs.args, :(u = rand(VectorizedRNG.GLOBAL_vPCG, Vec{$r,$T}) ))
-        rdw = r ÷ W
-        for j ∈ 1:r
-            push!(out_exprs.args, :( @inbounds u[$j].value ) )
+        rrep, rrem = divrem(r, W)
+        u_sym = gensym(Symbol(:u_remw))
+        push!(u_exprs.args, :($u_sym = rand(VectorizedRNG.GLOBAL_vPCG, Vec{$(W*rrep),$T}) ))
+        for j ∈ 1:W*rrep
+            push!(out_exprs.args, :( @inbounds $u_sym[$j].value ) )
+        end
+        u_sym = gensym(:u_rem)
+        push!(u_exprs.args, :($u_sym = rand(VectorizedRNG.GLOBAL_vPCG, Vec{$rrem,$T}) ))
+        for j ∈ 1:rrem
+            push!(out_exprs.args, :( @inbounds $u_sym[$j].value ) )
         end
     end
     push!(u_exprs.args, :(StaticSIMDArray{$S,$T,$N,$R,$L}($out_exprs)))
@@ -115,11 +125,15 @@ end
         q = quote ptr_A = pointer(A) end
     end
     if r > 0
-        push!(q.args, :(u = randn(VectorizedRNG.GLOBAL_vPCG, Vec{$r,$T}) ))
-        rdw = r ÷ W
-        for n ∈ 0:rdw - 1
-            push!(q.args, :(vstore($(VectorizedRNG.subset_vec(:u, W, n*W)), ptr_A, $(L - r + 1 + n*W))))
+        rrep, rrem = divrem(r, W)
+        u_sym = gensym(Symbol(:u_remw))
+        push!(q.args, :($u_sym = randn(VectorizedRNG.GLOBAL_vPCG, Vec{$(W*rrep),$T}) ))
+        for n ∈ 0:rrep - 1
+            push!(q.args, :(vstore($(VectorizedRNG.subset_vec(u_sym, W, n*W)), ptr_A, $(L - r + 1 + n*W))))
         end
+        u_sym = gensym(:u_rem)
+        push!(u_exprs.args, :($u_sym = randn(VectorizedRNG.GLOBAL_vPCG, Vec{$rrem,$T}) ))
+        push!(q.args, :(vstore($u_sym, ptr_A, $(L - rrem + 1))))
     end
     push!(q.args, :A)
     q
@@ -142,17 +156,23 @@ end
     u_exprs = quote end
     out_exprs = Expr(:tuple,)
     for i ∈ 1:nrep
-        u_sym = Symbol(:u_, i)
+        u_sym = gensym(Symbol(:u_, i))
         push!(u_exprs.args, :($u_sym = $float_q ))
         for j ∈ 1:4W
             push!(out_exprs.args, :( @inbounds $u_sym[$j].value ) )
         end
     end
     if r > 0
-        push!(u_exprs.args, :(u = randn(VectorizedRNG.GLOBAL_vPCG, Vec{$r,$T}) ))
-        rdw = r ÷ W
-        for j ∈ 1:r
-            push!(out_exprs.args, :( @inbounds u[$j].value ) )
+        rrep, rrem = divrem(r, W)
+        u_sym = gensym(Symbol(:u_remw))
+        push!(u_exprs.args, :($u_sym = randn(VectorizedRNG.GLOBAL_vPCG, Vec{$(W*rrep),$T}) ))
+        for j ∈ 1:W*rrep
+            push!(out_exprs.args, :( @inbounds $u_sym[$j].value ) )
+        end
+        u_sym = gensym(:u_rem)
+        push!(u_exprs.args, :($u_sym = randn(VectorizedRNG.GLOBAL_vPCG, Vec{$rrem,$T}) ))
+        for j ∈ 1:rrem
+            push!(out_exprs.args, :( @inbounds $u_sym[$j].value ) )
         end
     end
     push!(u_exprs.args, :(StaticSIMDArray{$S,$T,$N,$R,$L}($out_exprs)))
