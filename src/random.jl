@@ -146,8 +146,7 @@ end
 end
 
 
-# @generated
-function Random.randn(::Type{<:StaticSIMDArray{S,T}}) where {S,T<:Union{Float32,Float64}}
+@generated function Random.randn(::Type{<:StaticSIMDArray{S,T}}) where {S,T<:Union{Float32,Float64}}
     N = length(S.parameters)
 
     R, L = calculate_L_from_size(S.parameters)
