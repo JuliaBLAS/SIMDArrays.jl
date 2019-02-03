@@ -32,14 +32,14 @@ function static_mul_quote(M,N,P,T,R1,R2)
             @inbounds for n ∈ 1:$(N-1)
                 # $([:(
                 #     $(Symbol(:Acol_,mr)) = @inbounds $(Expr(:tuple, [:(Core.VecElement(A[ $(m + (mr-1)*W) + n*$R1 ])) for m ∈ 1:W]...));
-                #     # Base.Cartesian.@nexprs $P p -> $(Symbol(:C_, mr, :_p)) = SIMDPirates.vfma($(Symbol(:Acol_,mr)), (@inbounds B[n + 1 + (p-1)*$R2]), $(Symbol(:C_, mr, :_p)) )
-                #     $([:($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vfma($(Symbol(:Acol_,mr)), B[n + $(1 + (p-1)*R2)], $(Symbol(:C_, mr, :_, p)) )) for p ∈ 1:P]...)
+                #     # Base.Cartesian.@nexprs $P p -> $(Symbol(:C_, mr, :_p)) = SIMDPirates.vmuladd($(Symbol(:Acol_,mr)), (@inbounds B[n + 1 + (p-1)*$R2]), $(Symbol(:C_, mr, :_p)) )
+                #     $([:($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vmuladd($(Symbol(:Acol_,mr)), B[n + $(1 + (p-1)*R2)], $(Symbol(:C_, mr, :_, p)) )) for p ∈ 1:P]...)
                 # ) for mr ∈ 1:m_rep]...)
                 $([:(
                     $(Symbol(:Acol_,mr)) = @inbounds $(Expr(:tuple, [:(Core.VecElement(A[ $(m + (mr-1)*W) + n*$R1 ])) for m ∈ 1:W]...))
                 ) for mr ∈ 1:m_rep]...)
-                # $([Expr(:block, [:($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vfma($(Symbol(:Acol_,mr)), B[n + $(1 + (p-1)*R2)], $(Symbol(:C_, mr, :_, p)) )) for p ∈ 1:P]...) for mr ∈ 1:m_rep]...)
-                $([Expr(:block, [:($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vfma($(Symbol(:Acol_,mr)), B[n + $(1 + (p-1)*R2)], $(Symbol(:C_, mr, :_, p)) )) for mr ∈ 1:m_rep]...) for p ∈ 1:P]...)
+                # $([Expr(:block, [:($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vmuladd($(Symbol(:Acol_,mr)), B[n + $(1 + (p-1)*R2)], $(Symbol(:C_, mr, :_, p)) )) for p ∈ 1:P]...) for mr ∈ 1:m_rep]...)
+                $([Expr(:block, [:($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vmuladd($(Symbol(:Acol_,mr)), B[n + $(1 + (p-1)*R2)], $(Symbol(:C_, mr, :_, p)) )) for mr ∈ 1:m_rep]...) for p ∈ 1:P]...)
 
 
             end
@@ -64,12 +64,12 @@ function static_mul_quote(M,N,P,T,R1,R2)
         @inbounds for n ∈ 1:$(N-1)
             # $([:(
             #     $(Symbol(:Acol_,mr)) = $(Expr(:tuple, [:(Core.VecElement(A[ $(m + (mr-1)*W) + n*$R1 ])) for m ∈ 1:W]...));
-            #     $([:($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vfma($(Symbol(:Acol_,mr)), ( B[n + $(1 + (p-1)*R2)]), $(Symbol(:C_, mr, :_, p)) )) for p ∈ 1:piter]...)
+            #     $([:($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vmuladd($(Symbol(:Acol_,mr)), ( B[n + $(1 + (p-1)*R2)]), $(Symbol(:C_, mr, :_, p)) )) for p ∈ 1:piter]...)
             # ) for mr ∈ 1:m_rep]...)
             $([:(
                 $(Symbol(:Acol_,mr)) = $(Expr(:tuple, [:(Core.VecElement(A[ $(m + (mr-1)*W) + n*$R1 ])) for m ∈ 1:W]...))
             ) for mr ∈ 1:m_rep]...)
-            $([Expr(:block, [:($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vfma($(Symbol(:Acol_,mr)), ( B[n + $(1 + (p-1)*R2)]), $(Symbol(:C_, mr, :_, p)) )) for mr ∈ 1:m_rep]...) for p ∈ 1:piter]...)
+            $([Expr(:block, [:($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vmuladd($(Symbol(:Acol_,mr)), ( B[n + $(1 + (p-1)*R2)]), $(Symbol(:C_, mr, :_, p)) )) for mr ∈ 1:m_rep]...) for p ∈ 1:piter]...)
         end
     end
     plow = piter
@@ -87,10 +87,10 @@ function static_mul_quote(M,N,P,T,R1,R2)
                 $([:(
                     $(Symbol(:Acol_,mr)) = $(Expr(:tuple, [:(Core.VecElement(A[ $(m + (mr-1)*W) + n*$R1 ])) for m ∈ 1:W]...));
                 ) for mr ∈ 1:m_rep]...)
-                $([Expr(:block, [:($(Symbol(:C_, mr, :_, p+plow)) = SIMDPirates.vfma($(Symbol(:Acol_,mr)), B[n + $(1 + (p+(plow-1))*R2)], $(Symbol(:C_, mr, :_, p+plow)))) for mr ∈ 1:m_rep]...) for p ∈ 1:piter]...)
+                $([Expr(:block, [:($(Symbol(:C_, mr, :_, p+plow)) = SIMDPirates.vmuladd($(Symbol(:Acol_,mr)), B[n + $(1 + (p+(plow-1))*R2)], $(Symbol(:C_, mr, :_, p+plow)))) for mr ∈ 1:m_rep]...) for p ∈ 1:piter]...)
                 # @nexprs $m_rep mr -> begin
                 #     Acol_mr = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[$m + (mr-1)*$W + n*$R1])) for m ∈ 1:R1]...))
-                #     Base.Cartesian.@nexprs $piter p -> C_mr_{p+$plow} = SIMDPirates.vfma(Acol_mr, (@inbounds B[n + 1 + (p + $plow) * $R2 ]), C_mr_{p+$plow})
+                #     Base.Cartesian.@nexprs $piter p -> C_mr_{p+$plow} = SIMDPirates.vmuladd(Acol_mr, (@inbounds B[n + 1 + (p + $plow) * $R2 ]), C_mr_{p+$plow})
                 # end
             end
         end)
@@ -110,10 +110,10 @@ function static_mul_quote(M,N,P,T,R1,R2)
             $([:(
                 $(Symbol(:Acol_,mr)) = $(Expr(:tuple, [:(Core.VecElement(A[ $(m + (mr-1)*W) + n*$R1 ])) for m ∈ 1:W]...));
             ) for mr ∈ 1:m_rep]...)
-            $([Expr(:block, [:($(Symbol(:C_, mr, :_, p+plow)) = SIMDPirates.vfma($(Symbol(:Acol_,mr)), ( B[n +  $(1 + (p+(plow-1))*R2) ]), $(Symbol(:C_, mr, :_, p+plow)))) for mr ∈ 1:m_rep]...) for p ∈ 1:prem]...)
+            $([Expr(:block, [:($(Symbol(:C_, mr, :_, p+plow)) = SIMDPirates.vmuladd($(Symbol(:Acol_,mr)), ( B[n +  $(1 + (p+(plow-1))*R2) ]), $(Symbol(:C_, mr, :_, p+plow)))) for mr ∈ 1:m_rep]...) for p ∈ 1:prem]...)
             # @nexprs $m_rep mr -> begin
             #     Acol_mr = $(Expr(:tuple, [:(@inbounds Core.VecElement(A[$m + (mr-1)*$W + n*$R1])) for m ∈ 1:R1]...))
-            #     Base.Cartesian.@nexprs $prem p -> C_mr_{p+$plow} = SIMDPirates.vfma(Acol_mr, (@inbounds B[n + 1 + (p + $(plow-1)) * $R2 ]), C_mr_{p+$plow})
+            #     Base.Cartesian.@nexprs $prem p -> C_mr_{p+$plow} = SIMDPirates.vmuladd(Acol_mr, (@inbounds B[n + 1 + (p + $(plow-1)) * $R2 ]), C_mr_{p+$plow})
             # end
         end
     end)
@@ -208,11 +208,11 @@ end
 function mulquote(M,N,P,ADR,XR,T,init=:initkernel!,prefetchAX=nothing)
     (L1S, L2S, L3S), num = jBLAS.blocking_structure(M, N, P, T)
     if num == 0
-        if init == :kernel! || M*N*P > 8^3
+        # if init == :kernel! || M*N*P > 8^3
             return cache_mulquote(M,N,P,ADR,XR,L1S,T,init,prefetchAX)
-        else
-            return unrolled_kernel_quote(M,N,P,ADR,XR,T)
-        end
+        # else
+        #     return unrolled_kernel_quote(M,N,P,ADR,XR,T)
+        # end
         # return base_mulquote(M,N,P,ADR,XR,T)
     elseif num == 1
         # Loop over L1 cache blocks
@@ -257,12 +257,13 @@ function unrolled_kernel_quote(M,N,Pₖ,stride_AD,stride_X,T)
                 Dx_p_q = evmul(vA_q, vX)
             end
         end
-        Base.Cartesian.@nexprs $(N-1) n -> begin
+        # Base.Cartesian.@nexprs $(N-1) n -> begin
+        for n ∈ 1:$(N-1)
             Base.Cartesian.@nexprs $Pₖ p -> begin
                 vX = vbroadcast($V, unsafe_load(pX + n*$T_size + (p-1)*$X_stride))
                 Base.Cartesian.@nexprs $Q q -> begin
                     vA_q = vload($V, pA + n*$AD_stride + $REGISTER_SIZE*(q-1))
-                    Dx_p_q = vfma(vA_q, vX, Dx_p_q)
+                    Dx_p_q = vmuladd(vA_q, vX, Dx_p_q)
                 end
             end
         end
