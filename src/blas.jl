@@ -1,15 +1,16 @@
 
 function mul_block(W, R1, R2, m_rep, N, P, poffset = 0)
+    Prange = (1 + poffset):(P + poffset)
     quote
         $([:(
             $(Symbol(:Acol_,mr)) = @inbounds $(Expr(:tuple, [:(Core.VecElement(A[ $(m + (mr-1)*W) ])) for m ∈ 1:W]...))
         ) for mr ∈ 1:m_rep]...)
-        $([Expr(:block, [ :($(Symbol(:C_, mr, :_, p)) = SIMDPirates.evmul($(Symbol(:Acol_,mr)), @inbounds B[ $(1 + (p-1)*R2) ])) for mr ∈ 1:m_rep]...) for p ∈ 1:P]...)
+        $([Expr(:block, [ :($(Symbol(:C_, mr, :_, p)) = SIMDPirates.evmul($(Symbol(:Acol_,mr)), @inbounds B[ $(1 + (p-1)*R2) ])) for mr ∈ 1:m_rep]...) for p ∈ Prange]...)
         @inbounds for n ∈ 1:$(N-1)
             $([:(
                 $(Symbol(:Acol_,mr)) = @inbounds $(Expr(:tuple, [:(Core.VecElement(A[ $(m + (mr-1)*W) + n*$R1 ])) for m ∈ 1:W]...))
             ) for mr ∈ 1:m_rep]...)
-            $([Expr(:block, [:($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vmuladd($(Symbol(:Acol_,mr)), B[n + $(1 + (p-1)*R2)], $(Symbol(:C_, mr, :_, p)) )) for mr ∈ 1:m_rep]...) for p ∈ 1:P]...)
+            $([Expr(:block, [:($(Symbol(:C_, mr, :_, p)) = SIMDPirates.vmuladd($(Symbol(:Acol_,mr)), B[n + $(1 + (p-1)*R2)], $(Symbol(:C_, mr, :_, p)) )) for mr ∈ 1:m_rep]...) for p ∈ Prange]...)
         end
     end
 end
@@ -47,7 +48,7 @@ function static_mul_quote(M,N,P,T,R1,R2)
         plow += piter
     end
     prem = P - plow
-    push!(q.args, push!(q.args, mul_block(W, R1, R2, m_rep, N, prem, plow)))
+    prem > 0 && push!(q.args, mul_block(W, R1, R2, m_rep, N, prem, plow))
     push!(q.args,  :(@inbounds StaticSIMDMatrix{$M,$P,$T,$R1,$L3}( $(Expr(:tuple, outtup...)) )))
     q
 end
@@ -55,12 +56,21 @@ end
 @generated function Base.:*(A::StaticSIMDMatrix{M,N,T,R1,L1}, B::StaticSIMDMatrix{N,P,T,R2,L2}) where {M,N,P,T,R1,R2,L1,L2}
 # @generated function Base.:*(A::StaticSIMDMatrix{M,N,T,R1,L1}, B::StaticSIMDMatrix{N,P,T,R2,L2}) where {M,N,P,T,R1,R2,L2,L1}
     static_mul_quote(M,N,P,T,R1,R2)
+    # nothing
 end
 # @generated function Base.:*(A::LinearAlgebra.Adjoint{T,StaticSIMDVector{N,T,R1,L1}}, B::StaticSIMDMatrix{N,P,T,R2}) where {N,P,T,R1,R2,L1}
 #     static_mul_quote(1,N,P,T,R1,R2)
 # end
 @generated function Base.:*(A::StaticSIMDMatrix{M,N,T,R1}, B::StaticSIMDVector{N,T,R2}) where {M,N,T,R1,R2}
     static_mul_quote(M,N,1,T,R1,R2)
+end
+
+@generated function Base.:*(A::AbstractSizedSIMDMatrix{M,N,T,ADR}, X::AbstractSizedSIMDMatrix{N,P,T,XR}) where {M,N,P,T,ADR,XR}
+    quote
+        D = SizedSIMDArray{$(Tuple{M,P}),$T,2,$ADR,$(ADR*P)}(undef)
+        $(mulquote(ADR,N,P,ADR,XR,T))
+        StaticSIMDMatrix(D)
+    end
 end
 
 
@@ -88,12 +98,12 @@ end
 
     mulquote(ADR,N,P,ADR,XR,T)
 end
-@generated function LinearAlgebra.mul!(D::SIMDArrays.AbstractSizedSIMDMatrix{M,P,T,ADR},
-                            A::SIMDArrays.AbstractSizedSIMDMatrix{M,N,T,ADR},
-                            X::SIMDArrays.AbstractSizedSIMDMatrix{N,P,T,XR}) where {M,N,P,T,ADR,XR}
-
-    SIMDArrays.mulquote(ADR,N,P,ADR,XR,T)
-end
+# @generated function LinearAlgebra.mul!(D::SIMDArrays.AbstractSizedSIMDMatrix{M,P,T,ADR},
+#                             A::SIMDArrays.AbstractSizedSIMDMatrix{M,N,T,ADR},
+#                             X::SIMDArrays.AbstractSizedSIMDMatrix{N,P,T,XR}) where {M,N,P,T,ADR,XR}
+#
+#     SIMDArrays.mulquote(ADR,N,P,ADR,XR,T)
+# end
 @generated function LinearAlgebra.mul!(D::AbstractSizedSIMDVector{M,T,ADR},
                             A::AbstractSizedSIMDMatrix{M,N,T,ADR},
                             X::AbstractSizedSIMDVector{N,T,XR}) where {M,N,P,T,ADR,XR}
