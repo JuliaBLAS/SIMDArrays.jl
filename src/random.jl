@@ -21,7 +21,7 @@ end
     float_q = :(rand(VectorizedRNG.GLOBAL_vPCG, Vec{$(4W),$T}, VectorizedRNG.RXS_M_XS))
     store_expr = quote end
     for n ∈ 0:3
-        push!(store_expr.args, :(vstore($(VectorizedRNG.subset_vec(:u, W, n*W)), ptr_A, i + $(n*W))))
+        push!(store_expr.args, :(vstore!(ptr_A, $(VectorizedRNG.subset_vec(:u, W, n*W)), i + $(n*W))))
     end
     if nrep > 0
         q = quote
@@ -39,12 +39,12 @@ end
         u_sym = gensym(Symbol(:u_remw))
         push!(q.args, :($u_sym = rand(VectorizedRNG.GLOBAL_vPCG, Vec{$(W*rrep),$T}) ))
         for n ∈ 0:rrep - 1
-            push!(q.args, :(vstore($(VectorizedRNG.subset_vec(u_sym, W, n*W)), ptr_A, $(L - r + 1 + n*W))))
+            push!(q.args, :(vstore!(ptr_A, $(VectorizedRNG.subset_vec(u_sym, W, n*W)), $(L - r + 1 + n*W))))
         end
         if rrem > 0
             u_sym = gensym(:u_rem)
             push!(u_exprs.args, :($u_sym = rand(VectorizedRNG.GLOBAL_vPCG, Vec{$rrem,$T}) ))
-            push!(q.args, :(vstore($u_sym, ptr_A, $(L - rrem + 1))))
+            push!(q.args, :(vstore!(ptr_A, $u_sym, $(L - rrem + 1))))
         end
     end
     push!(q.args, :A)
@@ -61,7 +61,7 @@ end
     float_q = :(rand(VectorizedRNG.GLOBAL_vPCG, Vec{$(4W),$T}, VectorizedRNG.RXS_M_XS))
     store_expr = quote end
     for n ∈ 0:3
-        push!(store_expr.args, :(vstore($(VectorizedRNG.subset_vec(:u, W, n*W)), ptr_A, i + $(n*W))))
+        push!(store_expr.args, :(vstore!(ptr_A, $(VectorizedRNG.subset_vec(:u, W, n*W)), i + $(n*W))))
     end
     u_exprs = quote end
     out_exprs = Expr(:tuple,)
@@ -115,7 +115,7 @@ end
     float_q = :(randn(VectorizedRNG.GLOBAL_vPCG, Vec{$(4W),$T}, VectorizedRNG.RXS_M_XS))
     store_expr = quote end
     for n ∈ 0:3
-        push!(store_expr.args, :(vstore($(VectorizedRNG.subset_vec(:u, W, n*W)), ptr_A, i + $(n*W))))
+        push!(store_expr.args, :(vstore!(ptr_A, $(VectorizedRNG.subset_vec(:u, W, n*W)), i + $(n*W))))
     end
     if nrep > 0
         q = quote
@@ -133,12 +133,12 @@ end
         u_sym = gensym(Symbol(:u_remw))
         push!(q.args, :($u_sym = randn(VectorizedRNG.GLOBAL_vPCG, Vec{$(W*rrep),$T}) ))
         for n ∈ 0:rrep - 1
-            push!(q.args, :(vstore($(VectorizedRNG.subset_vec(u_sym, W, n*W)), ptr_A, $(L - r + 1 + n*W))))
+            push!(q.args, :(vstore!(ptr_A, $(VectorizedRNG.subset_vec(u_sym, W, n*W)), $(L - r + 1 + n*W))))
         end
         if rrem > 0
             u_sym = gensym(:u_rem)
             push!(u_exprs.args, :($u_sym = randn(VectorizedRNG.GLOBAL_vPCG, Vec{$rrem,$T}) ))
-            push!(q.args, :(vstore($u_sym, ptr_A, $(L - rrem + 1))))
+            push!(q.args, :(vstore!(ptr_A, $u_sym, $(L - rrem + 1))))
         end
     end
     push!(q.args, :A)
@@ -157,7 +157,7 @@ end
     float_q = :(randn(VectorizedRNG.GLOBAL_vPCG, Vec{$(4W),$T}, VectorizedRNG.RXS_M_XS))
     store_expr = quote end
     for n ∈ 0:3
-        push!(store_expr.args, :(vstore($(VectorizedRNG.subset_vec(:u, W, n*W)), ptr_A, i + $(n*W))))
+        push!(store_expr.args, :(vstore!(ptr_A, $(VectorizedRNG.subset_vec(:u, W, n*W)), i + $(n*W))))
     end
     u_exprs = quote end
     out_exprs = Expr(:tuple,)

@@ -48,7 +48,7 @@ Base.similar(::SizedSIMDArray{S},::Type{T}) where {S,T} = SizedSIMDArray{S,T}(un
         $(Expr(:meta, :inline))
         ptr_out, ptr_A = pointer(out), pointer(A)
         @inbounds for i ∈ 0:$VLT:$(LT-VLT)
-            vstore(vload($V, ptr_A + i), ptr_out + i)
+            vstore!(ptr_out + i, vload($V, ptr_A + i))
         end
         out
     end
@@ -64,7 +64,7 @@ end
         $(Expr(:meta, :inline))
         ptr_out, ptr_A = pointer(out), pointer(A)
         @inbounds for i ∈ 0:$VLT:$(LT-VLT)
-            vstore(vload($V, ptr_A + i), ptr_out + i)
+            vstore!(ptr_out + i, vload($V, ptr_A + i))
         end
         out
     end
@@ -111,7 +111,7 @@ Base.copy(A::SizedSIMDArray{S,T,N,R,L}) where {S,T,N,R,L} = copyto!(SizedSIMDArr
         ptr_out = pointer(out)
         v = vbroadcast($V ,val)
         for i ∈ 0:$VLT:$(LT-VLT)
-            vstore(evmul(vload($V, ptr_out + i), v), ptr_out + i)
+            vstore!(ptr_out + i, evmul(vload($V, ptr_out + i), v))
         end
         out
     end
@@ -283,10 +283,10 @@ end
     end
 
     if iter <= 8
-        push!(q.args, :(vstore(evmul(vload($V, ptr_C), vB), ptr_C)) )
+        push!(q.args, :(vstore!(ptr_C, evmul(vload($V, ptr_C), vB))) )
         for i ∈ 1:iter-1
             offset = i*VLT
-            push!(q.args, :(vstore(evmul(vload($V, ptr_C + $offset), vB), ptr_C + $offset)) )
+            push!(q.args, :(vstore!(ptr_C + $offset, evmul(vload($V, ptr_C + $offset), vB))) )
         end
     else
         rep, rem = divrem(iter, 4)
@@ -297,16 +297,16 @@ end
         push!(q.args,
             quote
                 for i ∈ 0:$(4VLT):$(4VLT*(rep-1))
-                    vstore(vload($V, ptr_C + i) * vB, ptr_C + i)
-                    vstore(evmul(vload($V, ptr_C + i + $VLT), vB), ptr_C + i + $VLT)
-                    vstore(evmul(vload($V, ptr_C + i + $(2VLT)), vB), ptr_C + i + $(2VLT))
-                    vstore(evmul(vload($V, ptr_C + i + $(3VLT)), vB), ptr_C + i + $(3VLT))
+                    vstore!(ptr_C + i, vload($V, ptr_C + i) * vB)
+                    vstore!(ptr_C + i + $VLT, evmul(vload($V, ptr_C + i + $VLT), vB))
+                    vstore!(ptr_C + i + $(2VLT), evmul(vload($V, ptr_C + i + $(2VLT)), vB))
+                    vstore!(ptr_C + i + $(3VLT), evmul(vload($V, ptr_C + i + $(3VLT)), vB), )
                 end
             end
         )
         for i ∈ 1:rem
             offset = VLT*(i + 4rep)
-            push!(q.args, :(vstore(evmul(vload($V, ptr_C + $offset), vB), ptr_C + $offset)) )
+            push!(q.args, :(vstore!(ptr_C + $offset, evmul(vload($V, ptr_C + $offset), vB))) )
         end
 
     end
@@ -327,10 +327,10 @@ end
     end
 
     if iter <= 8
-        push!(q.args, :(vstore(evmul(vload($V, ptr_A), vB), ptr_C)) )
+        push!(q.args, :(vstore!(ptr_C, evmul(vload($V, ptr_A), vB))) )
         for i ∈ 1:iter-1
             offset = i*VLT
-            push!(q.args, :(vstore(evmul(vload($V, ptr_A + $offset), vB), ptr_C + $offset)) )
+            push!(q.args, :(vstore!(ptr_C + $offset, evmul(vload($V, ptr_A + $offset), vB))) )
         end
     else
         rep, rem = divrem(iter, 4)
@@ -341,16 +341,16 @@ end
         push!(q.args,
             quote
                 for i ∈ 0:$(4VLT):$(4VLT*(rep-1))
-                    vstore(evmul(vload($V, ptr_A + i), vB), ptr_C + i)
-                    vstore(evmul(vload($V, ptr_A + i + $VLT), vB), ptr_C + i + $VLT)
-                    vstore(evmul(vload($V, ptr_A + i + $(2VLT)), vB), ptr_C + i + $(2VLT))
-                    vstore(evmul(vload($V, ptr_A + i + $(3VLT)), vB), ptr_C + i + $(3VLT))
+                    vstore!(ptr_C + i, evmul(vload($V, ptr_A + i), vB))
+                    vstore!(ptr_C + i + $VLT, evmul(vload($V, ptr_A + i + $VLT), vB))
+                    vstore!(ptr_C + i + $(2VLT), evmul(vload($V, ptr_A + i + $(2VLT)), vB))
+                    vstore!(ptr_C + i + $(3VLT), evmul(vload($V, ptr_A + i + $(3VLT)), vB))
                 end
             end
         )
         for i ∈ 1:rem
             offset = VLT*(i + 4rep)
-            push!(q.args, :(vstore(evmul(vload($V, ptr_A + $offset), vB), ptr_C + $offset)) )
+            push!(q.args, :(vstore!(ptr_C + $offset, evmul(vload($V, ptr_A + $offset), vB))) )
         end
 
     end
@@ -371,10 +371,10 @@ end
     end
 
     if iter <= 8
-        push!(q.args, :(vstore(evmul(vload($V, ptr_A), vB), ptr_C)) )
+        push!(q.args, :(vstore!(ptr_C, evmul(vload($V, ptr_A), vB))) )
         for i ∈ 1:iter-1
             offset = i*VLT
-            push!(q.args, :(vstore(evmul(vload($V, ptr_A + $offset), vB), ptr_C + $offset)) )
+            push!(q.args, :(vstore!(ptr_C + $offset, evmul(vload($V, ptr_A + $offset), vB))) )
         end
     else
         rep, rem = divrem(iter, 4)
@@ -385,16 +385,16 @@ end
         push!(q.args,
             quote
                 for i ∈ 0:$(4VLT):$(4VLT*(rep-1))
-                    vstore(evmul(vload($V, ptr_A + i), vB), ptr_C + i)
-                    vstore(evmul(vload($V, ptr_A + i + $VLT), vB), ptr_C + i + $VLT)
-                    vstore(evmul(vload($V, ptr_A + i + $(2VLT)), vB), ptr_C + i + $(2VLT))
-                    vstore(evmul(vload($V, ptr_A + i + $(3VLT)), vB), ptr_C + i + $(3VLT))
+                    vstore!(ptr_C + i, evmul(vload($V, ptr_A + i), vB))
+                    vstore!(ptr_C + i + $VLT, evmul(vload($V, ptr_A + i + $VLT), vB))
+                    vstore!(ptr_C + i + $(2VLT), evmul(vload($V, ptr_A + i + $(2VLT)), vB))
+                    vstore!(ptr_C + i + $(3VLT), evmul(vload($V, ptr_A + i + $(3VLT)), vB))
                 end
             end
         )
         for i ∈ 1:rem
             offset = VLT*(i + 4rep)
-            push!(q.args, :(vstore(evmul(vload($V, ptr_A + $offset), vB), ptr_C + $offset)) )
+            push!(q.args, :(vstore!(ptr_C + $offset, evmul(vload($V, ptr_A + $offset), vB))) )
         end
 
     end
@@ -415,10 +415,10 @@ end
     end
 
     if iter <= 8
-        push!(q.args, :(vstore(vsub(vload($V, ptr_A), vload($V, ptr_B)), ptr_C)) )
+        push!(q.args, :(vstore!(ptr_C, vsub(vload($V, ptr_A), vload($V, ptr_B)))) )
         for i ∈ 1:iter-1
             offset = i*VLT
-            push!(q.args, :(vstore(vsub(vload($V, ptr_A + $offset), vload($V, ptr_B + $offset)), ptr_C + $offset)) )
+            push!(q.args, :(vstore!(ptr_C + $offset, vsub(vload($V, ptr_A + $offset), vload($V, ptr_B + $offset)))) )
         end
     else
         rep, rem = divrem(iter, 4)
@@ -429,16 +429,16 @@ end
         push!(q.args,
             quote
                 for i ∈ 0:$(4VLT):$(4VLT*(rep-1))
-                    vstore(vsub(vload($V, ptr_A + i), vload($V, ptr_B + i), ptr_C + i))
-                    vstore(vsub(vload($V, ptr_A + i + $VLT), vload($V, ptr_B + i + $VLT)), ptr_C + i + $VLT)
-                    vstore(vsub(vload($V, ptr_A + i + $(2VLT)), vload($V, ptr_B + i + $(2VLT))), ptr_C + i + $(2VLT))
-                    vstore(vsub(vload($V, ptr_A + i + $(3VLT)), vload($V, ptr_B + i + $(3VLT))), ptr_C + i + $(3VLT))
+                    vstore!(ptr_C + i, vsub(vload($V, ptr_A + i), vload($V, ptr_B + i)))
+                    vstore!(ptr_C + i + $VLT, vsub(vload($V, ptr_A + i + $VLT), vload($V, ptr_B + i + $VLT)))
+                    vstore!(ptr_C + i + $(2VLT), vsub(vload($V, ptr_A + i + $(2VLT)), vload($V, ptr_B + i + $(2VLT))))
+                    vstore!(ptr_C + i + $(3VLT), vsub(vload($V, ptr_A + i + $(3VLT)), vload($V, ptr_B + i + $(3VLT))))
                 end
             end
         )
         for i ∈ 1:rem
             offset = VLT*(i + 4rep)
-            push!(q.args, :(vstore(vsub(vload($V, ptr_A + $offset), vload($V, ptr_B + $offset)), ptr_C + $offset)) )
+            push!(q.args, :(vstore!(ptr_C + $offset, vsub(vload($V, ptr_A + $offset), vload($V, ptr_B + $offset)))) )
         end
 
     end
@@ -459,10 +459,10 @@ end
     end
 
     if iter <= 8
-        push!(q.args, :(vstore(vadd(vload($V, ptr_A), vload($V, ptr_B)), ptr_C)) )
+        push!(q.args, :(vstore!(ptr_C, vadd(vload($V, ptr_A), vload($V, ptr_B)))) )
         for i ∈ 1:iter-1
             offset = i*VLT
-            push!(q.args, :(vstore(vadd(vload($V, ptr_A + $offset), vload($V, ptr_B + $offset)), ptr_C + $offset)) )
+            push!(q.args, :(vstore!(ptr_C + $offset, vadd(vload($V, ptr_A + $offset), vload($V, ptr_B + $offset)))) )
         end
     else
         rep, rem = divrem(iter, 4)
@@ -473,16 +473,16 @@ end
         push!(q.args,
             quote
                 for i ∈ 0:$(4VLT):$(4VLT*(rep-1))
-                    vstore(vadd(vload($V, ptr_A + i), vload($V, ptr_B + i)), ptr_C + i)
-                    vstore(vadd(vload($V, ptr_A + i + $VLT), vload($V, ptr_B + i + $VLT)), ptr_C + i + $VLT)
-                    vstore(vadd(vload($V, ptr_A + i + $(2VLT)), vload($V, ptr_B + i + $(2VLT))), ptr_C + i + $(2VLT))
-                    vstore(vadd(vload($V, ptr_A + i + $(3VLT)), vload($V, ptr_B + i + $(3VLT))), ptr_C + i + $(3VLT))
+                    vstore!(ptr_C + i, vadd(vload($V, ptr_A + i), vload($V, ptr_B + i)))
+                    vstore!(ptr_C + i + $VLT, vadd(vload($V, ptr_A + i + $VLT), vload($V, ptr_B + i + $VLT)))
+                    vstore!(ptr_C + i + $(2VLT), vadd(vload($V, ptr_A + i + $(2VLT)), vload($V, ptr_B + i + $(2VLT))))
+                    vstore!(ptr_C + i + $(3VLT), vadd(vload($V, ptr_A + i + $(3VLT)), vload($V, ptr_B + i + $(3VLT))))
                 end
             end
         )
         for i ∈ 1:rem
             offset = VLT*(i + 4rep)
-            push!(q.args, :(vstore(vadd(vload($V, ptr_A + $offset), vload($V, ptr_B + $offset)), ptr_C + $offset)) )
+            push!(q.args, :(vstore!(ptr_C + $offset, vadd(vload($V, ptr_A + $offset), vload($V, ptr_B + $offset)))) )
         end
 
     end
@@ -504,10 +504,10 @@ end
     end
 
     if iter <= 8
-        push!(q.args, :(vstore(vfma(vload($V, ptr_B),vα,vload($V, ptr_A)), ptr_C)) )
+        push!(q.args, :(vstore!(ptr_C, vmuladd(vload($V, ptr_B),vα,vload($V, ptr_A)))) )
         for i ∈ 1:iter-1
             offset = i*VLT
-            push!(q.args, :(vstore(vfma(vload($V, ptr_B + $offset), vα, vload($V, ptr_A + $offset)), ptr_C + $offset)) )
+            push!(q.args, :(vstore!(ptr_C + $offset, vmuladd(vload($V, ptr_B + $offset), vα, vload($V, ptr_A + $offset)))) )
         end
     else
         rep, rem = divrem(iter, 4)
@@ -518,16 +518,16 @@ end
         push!(q.args,
             quote
                 for i ∈ 0:$(4VLT):$(4VLT*(rep-1))
-                    vstore(vfma(vload($V, ptr_B + i),vα,vload($V, ptr_A + i)), ptr_C + i)
-                    vstore(vfma(vload($V, ptr_B + i + $VLT),vα,vload($V, ptr_A + i + $VLT)), ptr_C + i + $VLT)
-                    vstore(vfma(vload($V, ptr_B + i + $(2VLT)),vα,vload($V, ptr_A + i + $(2VLT))), ptr_C + i + $(2VLT))
-                    vstore(vfma(vload($V, ptr_B + i + $(3VLT)),vα,vload($V, ptr_A + i + $(3VLT))), ptr_C + i + $(3VLT))
+                    vstore!(ptr_C + i, vmuladd(vload($V, ptr_B + i),vα,vload($V, ptr_A + i)))
+                    vstore!(ptr_C + i + $VLT, vmuladd(vload($V, ptr_B + i + $VLT),vα,vload($V, ptr_A + i + $VLT)))
+                    vstore!(ptr_C + i + $(2VLT), vmuladd(vload($V, ptr_B + i + $(2VLT)),vα,vload($V, ptr_A + i + $(2VLT))))
+                    vstore!(ptr_C + i + $(3VLT), vmuladd(vload($V, ptr_B + i + $(3VLT)),vα,vload($V, ptr_A + i + $(3VLT))))
                 end
             end
         )
         for i ∈ 1:rem
             offset = VLT*(i + 4rep)
-            push!(q.args, :(vstore(vfma(vload($V, ptr_B + $offset), vα, vload($V, ptr_A + $offset)), ptr_C + $offset)) )
+            push!(q.args, :(vstore!(ptr_C + $offset, vmuladd(vload($V, ptr_B + $offset), vα, vload($V, ptr_A + $offset)))) )
         end
 
     end
@@ -580,14 +580,12 @@ function BFGS_update_quote(Mₖ,Pₖ,stride_AD,T)
                 @nexprs $Q q -> begin # I am concerned over the size of these dependency chains.
                     invH_q = vload($V, ptr_invH + $REGISTER_SIZE*(q-1) + $stride_AD*p)
                     vU_q = vload($V, ptr_U + $REGISTER_SIZE*(q-1))
-                    invH_q = vfma(vU_q, vSbc2, invH_q)
+                    invH_q = vmuladd(vU_q, vSbc2, invH_q)
                     vS_q = vload($V, ptr_S + $REGISTER_SIZE*(q-1))
-                    invH_q = vfma(vS_q, vSbc1, vfma(vS_q, vUbc2, invH_q))
-                    # vstore(invH_q, ptr_invH + $REGISTER_SIZE*(q-1) + $AD_stride*(p-1))
-                    vstore(invH_q, ptr_invH + $REGISTER_SIZE*(q-1) + $stride_AD*p)
+                    invH_q = vmuladd(vS_q, vSbc1, vmuladd(vS_q, vUbc2, invH_q))
+                    vstore!(ptr_invH + $REGISTER_SIZE*(q-1) + $stride_AD*p, invH_q)
                 end
             end
-            # @nexprs $Pₖ p -> @nexprs $Q q -> vstore(invH_q, ptr_invH + $REGISTER_SIZE*(q-1) + $AD_stride*(p-1))
             nothing
         end
     else
@@ -599,8 +597,8 @@ function BFGS_update_quote(Mₖ,Pₖ,stride_AD,T)
                 vSb = vbroadcast($V, unsafe_load(ptr_S + (p-1)*$T_size ))
                 vS = vload($V, ptr_S)
                 # Split up the dependency chain and reduce number of operations, when we can't save on vC1 and vC2 multiplications.
-                invH_p = vfma(vC2, vfma( vload($V, ptr_U), vSb, evmul(vS, vbroadcast($V, unsafe_load(ptr_U + (p-1)*$T_size )))), vfma( vS, evmul(vSb,vC1), invH_p ))
-                vstore(invH_p, ptr_invH + $AD_stride*(p-1))
+                invH_p = vmuladd(vC2, vmuladd( vload($V, ptr_U), vSb, evmul(vS, vbroadcast($V, unsafe_load(ptr_U + (p-1)*$T_size )))), vmuladd( vS, evmul(vSb,vC1), invH_p ))
+                vstore!(ptr_invH + $AD_stride*(p-1), invH_p)
             end
             nothing
         end

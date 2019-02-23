@@ -215,7 +215,7 @@ function unrolled_kernel_quote(M,N,Pₖ,stride_AD,stride_X,T)
                 end
             end
         end
-        Base.Cartesian.@nexprs $Pₖ p -> Base.Cartesian.@nexprs $Q q -> vstore(Dx_p_q, pD + $REGISTER_SIZE*(q-1) + $AD_stride*(p-1))
+        Base.Cartesian.@nexprs $Pₖ p -> Base.Cartesian.@nexprs $Q q -> vstore!(pD + $REGISTER_SIZE*(q-1) + $AD_stride*(p-1), Dx_p_q)
         nothing
     end
 end
